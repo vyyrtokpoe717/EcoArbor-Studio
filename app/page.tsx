@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { 
@@ -19,7 +19,13 @@ import {
   Layers, 
   Eye,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  CloudSun,
+  MapPin,
+  Compass,
+  Thermometer,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 
 type Species = {
@@ -166,6 +172,221 @@ export default function EcoArborApp() {
   const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
   const [inspectingMetric, setInspectingMetric] = useState<'carbon' | 'air' | 'hydrology' | null>(null);
   const [chartMetric, setChartMetric] = useState<'carbon' | 'pm25' | 'stormwater'>('carbon');
+
+  // Live Location and Weather/AQI state
+  const [liveLocation, setLiveLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [liveLocationName, setLiveLocationName] = useState<string>('');
+  const [weatherData, setWeatherData] = useState<{
+    temp: number;
+    windSpeed: number;
+    windDir: number;
+    pm25: number;
+    co: number;
+    ozone: number;
+  } | null>(null);
+  const [loadingLive, setLoadingLive] = useState<boolean>(true);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [isSynced, setIsSynced] = useState<boolean>(false);
+  const [locationSearchQuery, setLocationSearchQuery] = useState<string>('');
+
+  const getCompassDirection = (deg: number) => {
+    const index = Math.round(((deg % 360) / 45)) % 8;
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return directions[index];
+  };
+
+  const fetchTelemetry = useCallback(async (lat: number, lon: number, locationLabel?: string) => {
+    setLoadingLive(true);
+    setLiveError(null);
+    setLiveLocation({ lat, lon });
+    
+    if (locationLabel) {
+      setLiveLocationName(locationLabel);
+    } else {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`, {
+          headers: { 'Accept-Language': 'en' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.suburb || data.address.county || '';
+            const country = data.address.country || '';
+            setLiveLocationName(city ? `${city}, ${country}` : country || 'Unknown Area');
+          } else {
+            setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
+          }
+        } else {
+          setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
+        }
+      } catch {
+        setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
+      }
+    }
+
+    try {
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m`;
+      const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,carbon_monoxide,ozone`;
+
+      const [weatherRes, aqRes] = await Promise.all([
+        fetch(weatherUrl),
+        fetch(aqUrl)
+      ]);
+
+      if (!weatherRes.ok || !aqRes.ok) {
+        throw new Error('Failed to retrieve atmospheric telemetry.');
+      }
+
+      const weatherJson = await weatherRes.json();
+      const aqJson = await aqRes.json();
+
+      const rawWindSpeed = weatherJson.current.wind_speed_10m;
+      const windMPS = Number((rawWindSpeed / 3.6).toFixed(1));
+
+      const parsedWeather = {
+        temp: weatherJson.current.temperature_2m,
+        windSpeed: windMPS,
+        windDir: weatherJson.current.wind_direction_10m,
+        pm25: aqJson.current.pm2_5,
+        co: aqJson.current.carbon_monoxide,
+        ozone: aqJson.current.ozone
+      };
+
+      setWeatherData(parsedWeather);
+      
+      setPm25(Math.max(5, Math.min(300, Math.round(parsedWeather.pm25))));
+      setWindSpeed(Math.max(1, Math.min(12, windMPS)));
+      setIsSynced(true);
+    } catch (err: any) {
+      setLiveError(err.message || 'Error fetching telemetry.');
+    } finally {
+      setLoadingLive(false);
+    }
+  }, []);
+
+  const fetchIPFallback = useCallback(async () => {
+    // Attempt 1: ipwho.is (extremely accurate free tier API)
+    try {
+      const res = await fetch('https://ipwho.is/');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+          const label = data.city ? `${data.city}, ${data.country || ''}` : `${data.country || 'IP Location'}`;
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)');
+          return;
+        }
+      }
+    } catch {
+      // quiet fallback
+    }
+
+    // Attempt 2: freeipapi.com (reliable backup)
+    try {
+      const res = await fetch('https://freeipapi.com/api/json');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+          const label = data.cityName ? `${data.cityName}, ${data.countryName || ''}` : `${data.countryName || 'IP Location'}`;
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)');
+          return;
+        }
+      }
+    } catch {
+      // quiet fallback
+    }
+
+    // Attempt 3: ipapi.co (standard fallback)
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+          const label = data.city ? `${data.city}, ${data.country_name || ''}` : `${data.country_name || 'IP Location'}`;
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)');
+          return;
+        }
+      }
+    } catch {
+      // quiet fallback
+    }
+
+    // Attempt 4: Ultimate static fallback (FRI HQ, India)
+    await fetchTelemetry(30.3165, 78.0322, 'Dehradun, India (FRI HQ)');
+  }, [fetchTelemetry]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const timer = setTimeout(() => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            fetchTelemetry(lat, lon, 'Device Location');
+          },
+          () => {
+            fetchIPFallback();
+          },
+          { timeout: 7000, enableHighAccuracy: true }
+        );
+      } else {
+        fetchIPFallback();
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [mounted, fetchTelemetry, fetchIPFallback]);
+
+  const handleManualSync = () => {
+    setLoadingLive(true);
+    setLiveError(null);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          fetchTelemetry(lat, lon, 'Device Location');
+        },
+        () => {
+          fetchIPFallback();
+        },
+        { timeout: 7000, enableHighAccuracy: true }
+      );
+    } else {
+      fetchIPFallback();
+    }
+  };
+
+  const handleSearchLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!locationSearchQuery.trim()) return;
+    setLoadingLive(true);
+    setLiveError(null);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationSearchQuery)}&format=json&limit=3&accept-language=en`);
+      if (!res.ok) {
+        throw new Error('Search request failed. Please try again.');
+      }
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const item = data[0];
+        const lat = parseFloat(item.lat);
+        const lon = parseFloat(item.lon);
+        const displayName = item.display_name;
+        // Format beautifully: take first few items of address to avoid extremely long labels
+        const parts = displayName.split(',');
+        const shortLabel = parts.slice(0, 3).join(',').trim();
+        await fetchTelemetry(lat, lon, shortLabel);
+        setLocationSearchQuery('');
+      } else {
+        throw new Error('Location not found. Please specify a city or region.');
+      }
+    } catch (err: any) {
+      setLiveError(err.message || 'Error searching location.');
+      setLoadingLive(false);
+    }
+  };
 
   const activeSpecies = useMemo(() => speciesData.find(s => s.id === selectedSpeciesId) || speciesData[0], [selectedSpeciesId]);
 
@@ -335,7 +556,227 @@ export default function EcoArborApp() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 mt-8 space-y-8">
-        
+
+        {/* Real-time Location & Telemetry Dashboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Tile 1: Live Location & Coordinates */}
+          <div className="lg:col-span-4 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl p-5 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-white/20 flex flex-col justify-between">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+            
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  Live Coordinates
+                </span>
+                <button
+                  onClick={handleManualSync}
+                  disabled={loadingLive}
+                  className="p-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:border-white/20 hover:bg-white/[0.05] transition-all cursor-pointer text-white/60 hover:text-white disabled:opacity-50"
+                  title="Re-sync telemetry"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLive ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-950/80 text-emerald-400 rounded-xl border border-emerald-500/10 shadow-inner">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs text-white/50 font-medium">Current Location</h3>
+                    <p className="text-sm font-semibold text-white/90 truncate max-w-[200px]">
+                      {loadingLive ? 'Acquiring GPS...' : liveLocationName || 'Coordinates Synced'}
+                    </p>
+                  </div>
+                </div>
+
+                {liveLocation ? (
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 font-mono">
+                      <span className="text-[10px] text-white/40 block mb-0.5">LATITUDE</span>
+                      <span className="text-xs font-bold text-white/90">{liveLocation.lat.toFixed(5)}°</span>
+                    </div>
+                    <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 font-mono">
+                      <span className="text-[10px] text-white/40 block mb-0.5">LONGITUDE</span>
+                      <span className="text-xs font-bold text-white/90">{liveLocation.lon.toFixed(5)}°</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white/[0.01] rounded-xl p-4 border border-dashed border-white/10 text-center py-6">
+                    {liveError ? (
+                      <div className="text-rose-400 text-xs flex flex-col items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span className="leading-tight px-2">{liveError}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-white/40">Requesting device location...</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Manual Precision Search Bar */}
+                <form onSubmit={handleSearchLocation} className="mt-4 pt-1 flex gap-1.5 border-t border-white/5">
+                  <input
+                    type="text"
+                    value={locationSearchQuery}
+                    onChange={(e) => setLocationSearchQuery(e.target.value)}
+                    placeholder="Search city/area..."
+                    className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/40 transition-all font-sans"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loadingLive || !locationSearchQuery.trim()}
+                    className="px-3 py-1.5 text-xs bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition-all cursor-pointer font-medium hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:scale-100 flex items-center justify-center"
+                  >
+                    Search
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {liveLocation && (
+              <div className="text-[9px] font-mono text-emerald-400/80 bg-emerald-950/30 border border-emerald-500/10 rounded-lg p-2 mt-4 flex items-center justify-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                Live location synchronized successfully.
+              </div>
+            )}
+          </div>
+
+          {/* Tile 2: Live Weather & Air Quality Telemetry */}
+          <div className="lg:col-span-8 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl p-5 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-white/20 flex flex-col justify-between">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
+            
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-teal-400 bg-teal-950/80 px-2.5 py-1 rounded-full border border-teal-500/20 flex items-center gap-1.5">
+                  <CloudSun className="w-3.5 h-3.5" />
+                  Atmospheric & Air Quality Telemetry
+                </span>
+                <div className="flex items-center gap-2">
+                  {isSynced && (
+                    <span className="text-[10px] font-mono font-medium text-emerald-400 bg-emerald-950 border border-emerald-500/20 px-2 py-0.5 rounded">
+                      ✓ CAD Models Synced
+                    </span>
+                  )}
+                  <button
+                    onClick={handleManualSync}
+                    disabled={loadingLive}
+                    className="p-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:border-white/20 hover:bg-white/[0.05] transition-all cursor-pointer text-white/60 hover:text-white disabled:opacity-50"
+                    title="Re-sync telemetry"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingLive ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {loadingLive && !weatherData ? (
+                <div className="py-10 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="w-8 h-8 text-teal-400 animate-spin" />
+                  <p className="text-xs text-white/50">Fetching atmospheric metrics from Open-Meteo API...</p>
+                </div>
+              ) : weatherData ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  
+                  {/* Temp */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-orange-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Temp</span>
+                      <Thermometer className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.temp}°C</div>
+                      <span className="text-[9px] text-white/30">Ambient</span>
+                    </div>
+                  </div>
+
+                  {/* Wind Speed */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-teal-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Wind</span>
+                      <Wind className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.windSpeed} <span className="text-[10px] font-normal text-white/40">m/s</span></div>
+                      <span className="text-[9px] text-white/30">Velocity</span>
+                    </div>
+                  </div>
+
+                  {/* Wind Direction */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-sky-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Heading</span>
+                      <Compass className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.windDir}° <span className="text-xs text-sky-400 font-semibold">{getCompassDirection(weatherData.windDir)}</span></div>
+                      <span className="text-[9px] text-white/30">Direction</span>
+                    </div>
+                  </div>
+
+                  {/* PM2.5 */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-rose-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">PM2.5</span>
+                      <Activity className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className={`text-base font-bold font-mono ${
+                        weatherData.pm25 < 12 ? 'text-emerald-400' : weatherData.pm25 < 35 ? 'text-amber-400' : 'text-rose-400'
+                      }`}>
+                        {weatherData.pm25.toFixed(1)}
+                      </div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
+                    </div>
+                  </div>
+
+                  {/* Carbon Monoxide */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-blue-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">CO</span>
+                      <Droplets className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.co.toFixed(0)}</div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
+                    </div>
+                  </div>
+
+                  {/* Ozone */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-indigo-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Ozone</span>
+                      <Leaf className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.ozone.toFixed(1)}</div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                <div className="py-10 text-center border border-dashed border-white/10 rounded-xl bg-white/[0.01]">
+                  <p className="text-xs text-white/40">Please allow location services or click &quot;Re-sync&quot; to pull localized atmospheric details.</p>
+                </div>
+              )}
+            </div>
+
+            {weatherData && (
+              <p className="text-[10px] text-white/40 mt-4 leading-normal flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-white/40 inline" />
+                <span>The aerodynamic PM2.5 capture calculation of the simulated tree canopy actively updates based on the live wind speed of <strong className="text-white/80">{weatherData.windSpeed} m/s</strong> and localized concentration of <strong className="text-white/80">{weatherData.pm25} µg/m³</strong>.</span>
+              </p>
+            )}
+          </div>
+
+        </div>
+
         {/* Ecological Overview Summary Bar */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-4">
           <div className="flex items-center gap-3 p-2">
