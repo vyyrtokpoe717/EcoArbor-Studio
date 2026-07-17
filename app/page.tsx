@@ -17,7 +17,6 @@ import {
   Sparkles, 
   Calculator, 
   Layers, 
-  RefreshCw,
   Eye,
   CheckCircle,
   HelpCircle
@@ -164,6 +163,7 @@ export default function EcoArborApp() {
   
   // Field Log State
   const [logs, setLogs] = useState<LoggedTree[]>([]);
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
   const [inspectingMetric, setInspectingMetric] = useState<'carbon' | 'air' | 'hydrology' | null>(null);
   const [chartMetric, setChartMetric] = useState<'carbon' | 'pm25' | 'stormwater'>('carbon');
 
@@ -232,6 +232,17 @@ export default function EcoArborApp() {
     }, { co2e: 0, pm25: 0, stormwater: 0, count: 0 });
   }, [logs]);
 
+  // Selected totals for comparative chart (Arbor Stand Selected Synthesis)
+  const selectedTotals = useMemo(() => {
+    return logs.filter(log => selectedLogIds.includes(log.id)).reduce((acc, log) => {
+      acc.co2e += log.co2e;
+      acc.pm25 += log.pm25;
+      acc.stormwater += log.stormwater;
+      acc.count += 1;
+      return acc;
+    }, { co2e: 0, pm25: 0, stormwater: 0, count: 0 });
+  }, [logs, selectedLogIds]);
+
   const handleLogTree = () => {
     const newLog: LoggedTree = {
       id: Math.random().toString(36).substring(2, 9).toUpperCase(),
@@ -247,59 +258,17 @@ export default function EcoArborApp() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setLogs(prev => [newLog, ...prev]);
-  };
-
-  const handleLoadSampleStand = () => {
-    const samples: LoggedTree[] = [
-      {
-        id: 'L-A90F1',
-        speciesId: 'sacred-fig',
-        speciesName: 'Sacred Fig / Peepal',
-        scientificName: 'Ficus religiosa',
-        dbh: 95.0,
-        canopyDiameter: 18.0,
-        canopyArea: Math.PI * Math.pow(9.0, 2),
-        co2e: (Math.exp(-2.1550 + 2.4410 * Math.log(95.0)) * 0.50) * (44.01 / 12.011),
-        pm25: ((0.0022 + 0.0002 * 3.5) * 3600 * (120 * 1e-6)) * 5.2 * (Math.PI * Math.pow(9.0, 2)) * 1000,
-        stormwater: 1.4 * 5.2 * (Math.PI * Math.pow(9.0, 2)),
-        timestamp: '12:05 PM'
-      },
-      {
-        id: 'L-D44C2',
-        speciesId: 'deodar-cedar',
-        speciesName: 'Deodar Cedar',
-        scientificName: 'Cedrus deodara',
-        dbh: 65.5,
-        canopyDiameter: 12.5,
-        canopyArea: Math.PI * Math.pow(6.25, 2),
-        co2e: (0.0782 * Math.pow(65.5, 2.4180) * 0.50) * (44.01 / 12.011),
-        pm25: ((0.0072 + 0.0005 * 4.0) * 3600 * (45 * 1e-6)) * 6.8 * (Math.PI * Math.pow(6.25, 2)) * 1000,
-        stormwater: 2.2 * 6.8 * (Math.PI * Math.pow(6.25, 2)),
-        timestamp: '12:14 PM'
-      },
-      {
-        id: 'L-T22B8',
-        speciesId: 'teak',
-        speciesName: 'Teak',
-        scientificName: 'Tectona grandis',
-        dbh: 32.0,
-        canopyDiameter: 7.0,
-        canopyArea: Math.PI * Math.pow(3.5, 2),
-        co2e: (0.1140 * Math.pow(32.0, 2.3840) * 0.50) * (44.01 / 12.011),
-        pm25: ((0.0016 + 0.0002 * 2.5) * 3600 * (75 * 1e-6)) * 4.0 * (Math.PI * Math.pow(3.5, 2)) * 1000,
-        stormwater: 1.1 * 4.0 * (Math.PI * Math.pow(3.5, 2)),
-        timestamp: '12:18 PM'
-      }
-    ];
-    setLogs(samples);
+    setSelectedLogIds(prev => [newLog.id, ...prev]);
   };
 
   const handleClearLogs = () => {
     setLogs([]);
+    setSelectedLogIds([]);
   };
 
   const handleDeleteLog = (id: string) => {
     setLogs(prev => prev.filter(l => l.id !== id));
+    setSelectedLogIds(prev => prev.filter(selectedId => selectedId !== id));
   };
 
   const handleDownloadCSV = () => {
@@ -327,10 +296,16 @@ export default function EcoArborApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased pb-24 selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#020804] to-[#061408] text-slate-100 font-sans antialiased pb-24 selection:bg-emerald-500 selection:text-white relative overflow-hidden">
       
+      {/* Fluid Mesh Gradient Background Glowing Orbs */}
+      <div className="absolute top-[10%] left-[15%] w-[450px] h-[450px] rounded-full bg-[#1e3f20] filter blur-[120px] opacity-30 pointer-events-none -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute top-[40%] right-[10%] w-[550px] h-[550px] rounded-full bg-[#16f686] filter blur-[120px] opacity-20 pointer-events-none" />
+      <div className="absolute top-[70%] left-[25%] w-[500px] h-[500px] rounded-full bg-[#5beefc] filter blur-[120px] opacity-20 pointer-events-none" />
+      <div className="absolute bottom-[5%] right-[20%] w-[480px] h-[480px] rounded-full bg-[#1e3f20] filter blur-[120px] opacity-25 pointer-events-none" />
+
       {/* Top Banner & Title Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50 px-6 py-4">
+      <header className="border-b border-white/10 bg-white/[0.02] backdrop-blur-md sticky top-0 z-50 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-950/80 p-2 rounded-xl border border-emerald-500/30">
@@ -362,33 +337,33 @@ export default function EcoArborApp() {
       <main className="max-w-7xl mx-auto px-6 mt-8 space-y-8">
         
         {/* Ecological Overview Summary Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800 backdrop-blur">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-4">
           <div className="flex items-center gap-3 p-2">
             <Calculator className="w-5 h-5 text-emerald-400" />
             <div>
-              <div className="text-xs text-slate-400">Selected Species</div>
-              <div className="text-sm font-semibold text-white">{activeSpecies.name}</div>
+              <div className="text-xs text-white/60">Selected Species</div>
+              <div className="text-sm font-semibold text-white/90">{activeSpecies.name}</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-slate-800">
+          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-white/10">
             <Layers className="w-5 h-5 text-sky-400" />
             <div>
-              <div className="text-xs text-slate-400">Canopy Surface Area</div>
-              <div className="text-sm font-semibold text-white font-mono">{metrics.canopyArea.toFixed(1)} m²</div>
+              <div className="text-xs text-white/60">Canopy Surface Area</div>
+              <div className="text-sm font-semibold text-sky-400 font-mono">{metrics.canopyArea.toFixed(1)} m²</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-slate-800">
+          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-white/10">
             <Droplets className="w-5 h-5 text-blue-400" />
             <div>
-              <div className="text-xs text-slate-400">Leaf Area Index (LAI)</div>
-              <div className="text-sm font-semibold text-white font-mono">{activeSpecies.lai.toFixed(1)} m²/m²</div>
+              <div className="text-xs text-white/60">Leaf Area Index (LAI)</div>
+              <div className="text-sm font-semibold text-blue-400 font-mono">{activeSpecies.lai.toFixed(1)} m²/m²</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-slate-800">
+          <div className="flex items-center gap-3 p-2 border-t md:border-t-0 md:border-l border-white/10">
             <Wind className="w-5 h-5 text-teal-400" />
             <div>
-              <div className="text-xs text-slate-400">Dry Wood Biomass</div>
-              <div className="text-sm font-semibold text-white font-mono">{metrics.biomass.toFixed(1)} kg</div>
+              <div className="text-xs text-white/60">Dry Wood Biomass</div>
+              <div className="text-sm font-semibold text-emerald-400 font-mono">{metrics.biomass.toFixed(1)} kg</div>
             </div>
           </div>
         </div>
@@ -398,10 +373,10 @@ export default function EcoArborApp() {
           
           {/* Left Panel: Inputs and Parameter Sliders */}
           <section id="parameter-panel" className="lg:col-span-4 space-y-6">
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl relative overflow-hidden">
+            <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
               
-              <h2 className="text-md font-bold text-white mb-6 flex items-center gap-2 border-b border-slate-800 pb-3">
+              <h2 className="text-md font-bold text-white/90 mb-6 flex items-center gap-2 border-b border-white/10 pb-3">
                 <Activity className="w-4 h-4 text-emerald-400" />
                 Arboricultural Inputs
               </h2>
@@ -411,16 +386,18 @@ export default function EcoArborApp() {
                 {/* Species Dropdown */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Tree Species</label>
+                    <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Tree Species</label>
                     <span className="text-xs font-mono text-emerald-400/90 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20">{activeSpecies.type}</span>
                   </div>
                   <select 
                     value={selectedSpeciesId}
                     onChange={(e) => setSelectedSpeciesId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl px-3 py-3 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                    className="w-full bg-white/[0.04] backdrop-blur-md border border-white/10 hover:border-white/20 rounded-xl px-3 py-3 text-sm font-medium text-white/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all cursor-pointer shadow-md"
                   >
                     {speciesData.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.scientificName})</option>
+                      <option key={s.id} value={s.id} className="bg-[#051709] text-white">
+                        {s.name} ({s.scientificName})
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -428,7 +405,7 @@ export default function EcoArborApp() {
                 {/* Trunk DBH */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Trunk DBH</label>
+                    <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Trunk DBH</label>
                     <span className="text-xs font-mono font-semibold text-emerald-300 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-500/30">
                       {dbh.toFixed(1)} cm
                     </span>
@@ -436,9 +413,9 @@ export default function EcoArborApp() {
                   <input 
                     type="range" min="10" max="150" step="0.5" 
                     value={dbh} onChange={(e) => setDbh(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-colors" 
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-colors" 
                   />
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <div className="flex justify-between text-[10px] text-white/40 font-mono">
                     <span>10 cm (Sapling)</span>
                     <span>150 cm (Giant)</span>
                   </div>
@@ -447,7 +424,7 @@ export default function EcoArborApp() {
                 {/* Canopy Diameter */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Canopy Diameter</label>
+                    <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Canopy Diameter</label>
                     <span className="text-xs font-mono font-semibold text-emerald-300 bg-emerald-950/80 px-2 py-1 rounded border border-emerald-500/30">
                       {canopyDiameter.toFixed(1)} m
                     </span>
@@ -455,9 +432,9 @@ export default function EcoArborApp() {
                   <input 
                     type="range" min="2" max="25" step="0.5" 
                     value={canopyDiameter} onChange={(e) => setCanopyDiameter(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-colors" 
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-400 transition-colors" 
                   />
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <div className="flex justify-between text-[10px] text-white/40 font-mono">
                     <span>2 m</span>
                     <span>25 m</span>
                   </div>
@@ -466,7 +443,7 @@ export default function EcoArborApp() {
                 {/* Ambient PM2.5 */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Ambient PM2.5</label>
+                    <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Ambient PM2.5</label>
                     <span className="text-xs font-mono font-semibold text-sky-300 bg-sky-950/80 px-2 py-1 rounded border border-sky-500/30">
                       {pm25} µg/m³
                     </span>
@@ -474,9 +451,9 @@ export default function EcoArborApp() {
                   <input 
                     type="range" min="5" max="300" step="1" 
                     value={pm25} onChange={(e) => setPm25(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500 hover:accent-sky-400 transition-colors" 
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-sky-500 hover:accent-sky-400 transition-colors" 
                   />
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <div className="flex justify-between text-[10px] text-white/40 font-mono">
                     <span>5 µg/m³ (Clean)</span>
                     <span className="text-red-400 font-medium">300 µg/m³ (Severe AQI)</span>
                   </div>
@@ -485,7 +462,7 @@ export default function EcoArborApp() {
                 {/* Wind Speed */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Ambient Wind Speed</label>
+                    <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Ambient Wind Speed</label>
                     <span className="text-xs font-mono font-semibold text-blue-300 bg-blue-950/80 px-2 py-1 rounded border border-blue-500/30">
                       {windSpeed.toFixed(1)} m/s
                     </span>
@@ -493,33 +470,26 @@ export default function EcoArborApp() {
                   <input 
                     type="range" min="1" max="12" step="0.5" 
                     value={windSpeed} onChange={(e) => setWindSpeed(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 transition-colors" 
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500 hover:accent-blue-400 transition-colors" 
                   />
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <div className="flex justify-between text-[10px] text-white/40 font-mono">
                     <span>1 m/s (Breeze)</span>
                     <span>12 m/s (Gale)</span>
                   </div>
                 </div>
 
+                {/* Log Tree Asset Button inside Arboricultural Inputs */}
+                <div className="pt-5 border-t border-white/10">
+                  <button
+                    onClick={handleLogTree}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-white/10 text-white font-semibold py-3.5 px-4 rounded-xl transition-all shadow-lg hover:shadow-emerald-900/30 active:scale-[0.98] cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 shrink-0" />
+                    Log Tree Asset to Field Report
+                  </button>
+                </div>
+
               </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-3">
-              <button
-                onClick={handleLogTree}
-                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3.5 px-4 rounded-xl transition-all shadow-lg hover:shadow-emerald-900/20 active:scale-[0.98]"
-              >
-                <Plus className="w-4 h-4 shrink-0" />
-                Log Tree Asset to Field Report
-              </button>
-              
-              <button
-                onClick={handleLoadSampleStand}
-                className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 font-medium py-3 px-4 rounded-xl transition-all"
-              >
-                <RefreshCw className="w-4 h-4 shrink-0" />
-                Load Sample Stand
-              </button>
             </div>
           </section>
 
@@ -527,20 +497,20 @@ export default function EcoArborApp() {
           <div className="lg:col-span-8 space-y-6">
             
             {/* Real-time Dynamic CAD/GIS Sandbox */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl overflow-hidden relative">
-              <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-md text-[10px] font-mono text-slate-400 border border-slate-800">
+            <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 overflow-hidden relative">
+              <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/[0.02] backdrop-blur border border-white/10 px-2.5 py-1 rounded-md text-[10px] font-mono text-white/60">
                 <Eye className="w-3.5 h-3.5 text-emerald-400" />
                 Live Canopy CAD Simulator
               </div>
               
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+              <h2 className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">
                 Interactive Morphology Preview
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                 
                 {/* SVG Live Vector Render */}
-                <div className="md:col-span-7 bg-slate-950/80 rounded-xl p-4 border border-slate-800/80 aspect-[16/10] relative flex items-center justify-center overflow-hidden">
+                <div className="md:col-span-7 bg-slate-950/40 backdrop-blur-sm rounded-xl p-4 border border-white/10 aspect-[16/10] relative flex items-center justify-center overflow-hidden">
                   
                   {/* Rain background effect based on stormwater storage */}
                   <div className="absolute inset-0 pointer-events-none opacity-20">
@@ -682,26 +652,26 @@ export default function EcoArborApp() {
                 {/* Botanical Species dossier / facts */}
                 <div className="md:col-span-5 space-y-4">
                   <div>
-                    <h3 className="text-md font-bold text-white leading-tight">
+                    <h3 className="text-md font-bold text-white/90 leading-tight">
                       {activeSpecies.name}
                     </h3>
-                    <p className="text-xs italic text-emerald-400/90 font-serif">
+                    <p className="text-xs italic text-emerald-400 font-serif">
                       {activeSpecies.scientificName}
                     </p>
                   </div>
 
-                  <div className="text-xs space-y-2 text-slate-300">
+                  <div className="text-xs space-y-2 text-white/70">
                     <div>
-                      <span className="font-semibold text-slate-400 block uppercase text-[9px] tracking-wider">Botanical Family</span>
-                      <p className="font-mono bg-slate-950 px-2 py-1 rounded text-slate-200 mt-0.5 border border-slate-800 inline-block">{activeSpecies.family}</p>
+                      <span className="font-semibold text-white/40 block uppercase text-[9px] tracking-wider">Botanical Family</span>
+                      <p className="font-mono bg-white/[0.04] backdrop-blur-md px-2 py-1 rounded text-white/90 mt-0.5 border border-white/10 inline-block">{activeSpecies.family}</p>
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-400 block uppercase text-[9px] tracking-wider">Ecological Niche</span>
-                      <p>{activeSpecies.habitat}</p>
+                      <span className="font-semibold text-white/40 block uppercase text-[9px] tracking-wider">Ecological Niche</span>
+                      <p className="text-white/80">{activeSpecies.habitat}</p>
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-400 block uppercase text-[9px] tracking-wider">Species Profile</span>
-                      <p className="leading-relaxed text-slate-400">{activeSpecies.description}</p>
+                      <span className="font-semibold text-white/40 block uppercase text-[9px] tracking-wider">Species Profile</span>
+                      <p className="leading-relaxed text-white/60">{activeSpecies.description}</p>
                     </div>
                   </div>
                 </div>
@@ -714,8 +684,8 @@ export default function EcoArborApp() {
               
               {/* Card 1: Carbon */}
               <div 
-                className={`bg-slate-900 rounded-2xl border transition-all cursor-pointer p-6 flex flex-col justify-between group ${
-                  inspectingMetric === 'carbon' ? 'border-emerald-400 ring-1 ring-emerald-400/20' : 'border-slate-800 hover:border-slate-700'
+                className={`bg-white/[0.04] backdrop-blur-lg border rounded-2xl shadow-2xl transition-all duration-300 cursor-pointer p-6 flex flex-col justify-between group ${
+                  inspectingMetric === 'carbon' ? 'border-emerald-400 ring-1 ring-emerald-400/20 bg-white/[0.08]' : 'border-white/10 hover:border-white/20'
                 }`}
                 onClick={() => setInspectingMetric(inspectingMetric === 'carbon' ? null : 'carbon')}
               >
@@ -728,7 +698,7 @@ export default function EcoArborApp() {
                       CO₂e Active
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-200 mt-4">Carbon Sequestration</h3>
+                  <h3 className="text-sm font-semibold text-white/90 mt-4">Carbon Sequestration</h3>
                   <div className="mt-3 flex items-baseline gap-1.5 h-10 overflow-hidden relative">
                     <AnimatePresence mode="wait">
                       <motion.span
@@ -742,20 +712,20 @@ export default function EcoArborApp() {
                         {metrics.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                       </motion.span>
                     </AnimatePresence>
-                    <span className="text-sm text-slate-400 font-medium self-end ml-1">kg</span>
+                    <span className="text-sm text-white/60 font-medium self-end ml-1">kg</span>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="mt-5 pt-3 border-t border-white/10 text-[10px] text-white/40 flex items-center justify-between">
                   <span>Click to view equations</span>
-                  <Info className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                  <Info className="w-3.5 h-3.5 text-white/40 group-hover:text-emerald-400 transition-colors" />
                 </div>
               </div>
 
               {/* Card 2: Air Quality */}
               <div 
-                className={`bg-slate-900 rounded-2xl border transition-all cursor-pointer p-6 flex flex-col justify-between group ${
-                  inspectingMetric === 'air' ? 'border-sky-400 ring-1 ring-sky-400/20' : 'border-slate-800 hover:border-slate-700'
+                className={`bg-white/[0.04] backdrop-blur-lg border rounded-2xl shadow-2xl transition-all duration-300 cursor-pointer p-6 flex flex-col justify-between group ${
+                  inspectingMetric === 'air' ? 'border-sky-400 ring-1 ring-sky-400/20 bg-white/[0.08]' : 'border-white/10 hover:border-white/20'
                 }`}
                 onClick={() => setInspectingMetric(inspectingMetric === 'air' ? null : 'air')}
               >
@@ -768,7 +738,7 @@ export default function EcoArborApp() {
                       PM₂.₅ Deposition
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-200 mt-4">Air Quality Benefit</h3>
+                  <h3 className="text-sm font-semibold text-white/90 mt-4">Air Quality Benefit</h3>
                   <div className="mt-3 flex items-baseline gap-1.5 h-10 overflow-hidden relative">
                     <AnimatePresence mode="wait">
                       <motion.span
@@ -782,20 +752,20 @@ export default function EcoArborApp() {
                         {metrics.pm25Intercepted.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                       </motion.span>
                     </AnimatePresence>
-                    <span className="text-sm text-slate-400 font-medium self-end ml-1">mg/hr</span>
+                    <span className="text-sm text-white/60 font-medium self-end ml-1">mg/hr</span>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="mt-5 pt-3 border-t border-white/10 text-[10px] text-white/40 flex items-center justify-between">
                   <span>Click to view equations</span>
-                  <Info className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 transition-colors" />
+                  <Info className="w-3.5 h-3.5 text-white/40 group-hover:text-sky-400 transition-colors" />
                 </div>
               </div>
 
               {/* Card 3: Hydrology */}
               <div 
-                className={`bg-slate-900 rounded-2xl border transition-all cursor-pointer p-6 flex flex-col justify-between group ${
-                  inspectingMetric === 'hydrology' ? 'border-blue-400 ring-1 ring-blue-400/20' : 'border-slate-800 hover:border-slate-700'
+                className={`bg-white/[0.04] backdrop-blur-lg border rounded-2xl shadow-2xl transition-all duration-300 cursor-pointer p-6 flex flex-col justify-between group ${
+                  inspectingMetric === 'hydrology' ? 'border-blue-400 ring-1 ring-blue-400/20 bg-white/[0.08]' : 'border-white/10 hover:border-white/20'
                 }`}
                 onClick={() => setInspectingMetric(inspectingMetric === 'hydrology' ? null : 'hydrology')}
               >
@@ -808,7 +778,7 @@ export default function EcoArborApp() {
                       Stormwater Sc
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-200 mt-4">Hydrological Retention</h3>
+                  <h3 className="text-sm font-semibold text-white/90 mt-4">Hydrological Retention</h3>
                   <div className="mt-3 flex items-baseline gap-1.5 h-10 overflow-hidden relative">
                     <AnimatePresence mode="wait">
                       <motion.span
@@ -822,13 +792,13 @@ export default function EcoArborApp() {
                         {metrics.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                       </motion.span>
                     </AnimatePresence>
-                    <span className="text-sm text-slate-400 font-medium self-end ml-1">Liters</span>
+                    <span className="text-sm text-white/60 font-medium self-end ml-1">Liters</span>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="mt-5 pt-3 border-t border-white/10 text-[10px] text-white/40 flex items-center justify-between">
                   <span>Click to view equations</span>
-                  <Info className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />
+                  <Info className="w-3.5 h-3.5 text-white/40 group-hover:text-blue-400 transition-colors" />
                 </div>
               </div>
 
@@ -841,22 +811,22 @@ export default function EcoArborApp() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-slate-900/80 rounded-2xl border border-slate-800 p-6 overflow-hidden shadow-xl"
+                  className="bg-white/[0.02] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl p-6 overflow-hidden"
                 >
                   {inspectingMetric === 'carbon' && (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
                         <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                           <Calculator className="w-4 h-4" />
                           Step-by-Step Carbon Equation Walkthrough
                         </h4>
-                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-slate-500 hover:text-slate-300">Close</button>
+                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-white/40 hover:text-white/80 cursor-pointer">Close</button>
                       </div>
-                      <div className="text-xs text-slate-300 space-y-3 font-mono leading-relaxed">
+                      <div className="text-xs text-white/70 space-y-3 font-mono leading-relaxed">
                         <div>
-                          <span className="text-slate-500 block">Step 1: Calculate Aboveground Dry Wood Biomass (M)</span>
-                          <span className="text-slate-400">Formula:</span> {activeSpecies.equationType === 'power' ? 'M = a * (DBH ^ b)' : 'M = exp(a + b * ln(DBH))'}<br/>
-                          <span className="text-slate-400">Substitution:</span> M = {
+                          <span className="text-white/40 block">Step 1: Calculate Aboveground Dry Wood Biomass (M)</span>
+                          <span className="text-white/60">Formula:</span> {activeSpecies.equationType === 'power' ? 'M = a * (DBH ^ b)' : 'M = exp(a + b * ln(DBH))'}<br/>
+                          <span className="text-white/60">Substitution:</span> M = {
                             activeSpecies.equationType === 'power' 
                               ? `${activeSpecies.a} * (${dbh.toFixed(1)} ^ ${activeSpecies.b})`
                               : `exp(${activeSpecies.a} + ${activeSpecies.b} * ln(${dbh.toFixed(1)}))`
@@ -864,15 +834,15 @@ export default function EcoArborApp() {
                           <span className="text-emerald-400 font-semibold">Output:</span> M = <span className="text-white">{metrics.biomass.toFixed(4)} kg</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 2: Dry wood Carbon fraction (assume 50% Carbon Content)</span>
-                          <span className="text-slate-400">Formula:</span> Carbon Content = M * 0.50<br/>
-                          <span className="text-slate-400">Substitution:</span> Carbon = {metrics.biomass.toFixed(4)} * 0.50<br/>
+                          <span className="text-white/40 block">Step 2: Dry wood Carbon fraction (assume 50% Carbon Content)</span>
+                          <span className="text-white/60">Formula:</span> Carbon Content = M * 0.50<br/>
+                          <span className="text-white/60">Substitution:</span> Carbon = {metrics.biomass.toFixed(4)} * 0.50<br/>
                           <span className="text-emerald-400 font-semibold">Output:</span> Carbon Content = <span className="text-white">{metrics.carbonContent.toFixed(4)} kg C</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 3: Convert to Carbon Dioxide Equivalent (CO₂e)</span>
-                          <span className="text-slate-400">Formula:</span> CO₂e = Carbon Content * (Molecular weight CO₂ / Carbon) ≈ Carbon Content * 3.667<br/>
-                          <span className="text-slate-400">Substitution:</span> CO₂e = {metrics.carbonContent.toFixed(4)} * (44.01 / 12.011)<br/>
+                          <span className="text-white/40 block">Step 3: Convert to Carbon Dioxide Equivalent (CO₂e)</span>
+                          <span className="text-white/60">Formula:</span> CO₂e = Carbon Content * (Molecular weight CO₂ / Carbon) ≈ Carbon Content * 3.667<br/>
+                          <span className="text-white/60">Substitution:</span> CO₂e = {metrics.carbonContent.toFixed(4)} * (44.01 / 12.011)<br/>
                           <span className="text-emerald-400 font-bold">Calculated CO₂e:</span> <span className="text-emerald-300 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/20">{metrics.co2e.toFixed(2)} kg</span>
                         </div>
                       </div>
@@ -881,36 +851,36 @@ export default function EcoArborApp() {
 
                   {inspectingMetric === 'air' && (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
                         <h4 className="text-sm font-bold text-sky-400 flex items-center gap-2">
                           <Calculator className="w-4 h-4" />
                           i-Tree PM2.5 Deposition Mathematical Disclosures
                         </h4>
-                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-slate-500 hover:text-slate-300">Close</button>
+                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-white/40 hover:text-white/80 cursor-pointer">Close</button>
                       </div>
-                      <div className="text-xs text-slate-300 space-y-3 font-mono leading-relaxed">
+                      <div className="text-xs text-white/70 space-y-3 font-mono leading-relaxed">
                         <div>
-                          <span className="text-slate-500 block">Step 1: Determine Canopy Ground Area (A)</span>
-                          <span className="text-slate-400">Formula:</span> A = π * (Canopy_Diameter / 2)²<br/>
-                          <span className="text-slate-400">Substitution:</span> A = 3.14159 * ({canopyDiameter.toFixed(1)} / 2)²<br/>
+                          <span className="text-white/40 block">Step 1: Determine Canopy Ground Area (A)</span>
+                          <span className="text-white/60">Formula:</span> A = π * (Canopy_Diameter / 2)²<br/>
+                          <span className="text-white/60">Substitution:</span> A = 3.14159 * ({canopyDiameter.toFixed(1)} / 2)²<br/>
                           <span className="text-sky-400 font-semibold">Output:</span> A = <span className="text-white">{metrics.canopyArea.toFixed(4)} m²</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 2: Compute Wind-Adjusted Deposition Velocity (Vd)</span>
-                          <span className="text-slate-400">Formula:</span> {activeSpecies.type === 'Conifer' ? 'Vd = Base_Vd + (0.0005 * Wind)' : 'Vd = Base_Vd + (0.0002 * Wind)'} m/s<br/>
-                          <span className="text-slate-400">Substitution:</span> Vd = {activeSpecies.baseVd} + ({activeSpecies.type === 'Conifer' ? '0.0005' : '0.0002'} * {windSpeed.toFixed(1)})<br/>
+                          <span className="text-white/40 block">Step 2: Compute Wind-Adjusted Deposition Velocity (Vd)</span>
+                          <span className="text-white/60">Formula:</span> {activeSpecies.type === 'Conifer' ? 'Vd = Base_Vd + (0.0005 * Wind)' : 'Vd = Base_Vd + (0.0002 * Wind)'} m/s<br/>
+                          <span className="text-white/60">Substitution:</span> Vd = {activeSpecies.baseVd} + ({activeSpecies.type === 'Conifer' ? '0.0005' : '0.0002'} * {windSpeed.toFixed(1)})<br/>
                           <span className="text-sky-400 font-semibold">Output (m/s):</span> Vd = <span className="text-white">{metrics.vdMPS.toFixed(6)} m/s</span><br/>
-                          <span className="text-slate-400">Convert to m/hr:</span> Vd = {metrics.vdMPS.toFixed(6)} * 3600 = <span className="text-white">{metrics.vdPerHour.toFixed(4)} m/hr</span>
+                          <span className="text-white/60">Convert to m/hr:</span> Vd = {metrics.vdMPS.toFixed(6)} * 3600 = <span className="text-white">{metrics.vdPerHour.toFixed(4)} m/hr</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 3: Convert Ambient PM2.5 Concentration to g/m³</span>
-                          <span className="text-slate-400">Formula:</span> C = Ambient * 1e-6<br/>
-                          <span className="text-slate-400">Substitution:</span> C = {pm25} * 0.000001 = <span className="text-white">{(pm25 * 1e-6).toFixed(8)} g/m³</span>
+                          <span className="text-white/40 block">Step 3: Convert Ambient PM2.5 Concentration to g/m³</span>
+                          <span className="text-white/60">Formula:</span> C = Ambient * 1e-6<br/>
+                          <span className="text-white/60">Substitution:</span> C = {pm25} * 0.000001 = <span className="text-white">{(pm25 * 1e-6).toFixed(8)} g/m³</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 4: Compute Total Hourly Intercepted Mass (P)</span>
-                          <span className="text-slate-400">Formula:</span> P = Vd_hr * C * LAI * A * 1000 mg/hr<br/>
-                          <span className="text-slate-400">Substitution:</span> P = {metrics.vdPerHour.toFixed(4)} * {(pm25 * 1e-6).toFixed(8)} * {activeSpecies.lai} * {metrics.canopyArea.toFixed(4)} * 1000<br/>
+                          <span className="text-white/40 block">Step 4: Compute Total Hourly Intercepted Mass (P)</span>
+                          <span className="text-white/60">Formula:</span> P = Vd_hr * C * LAI * A * 1000 mg/hr<br/>
+                          <span className="text-white/60">Substitution:</span> P = {metrics.vdPerHour.toFixed(4)} * {(pm25 * 1e-6).toFixed(8)} * {activeSpecies.lai} * {metrics.canopyArea.toFixed(4)} * 1000<br/>
                           <span className="text-sky-400 font-bold">Calculated Interception:</span> <span className="text-sky-300 bg-sky-950 px-1.5 py-0.5 rounded border border-sky-500/20">{metrics.pm25Intercepted.toFixed(2)} mg/hour</span>
                         </div>
                       </div>
@@ -919,24 +889,24 @@ export default function EcoArborApp() {
 
                   {inspectingMetric === 'hydrology' && (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
                         <h4 className="text-sm font-bold text-blue-400 flex items-center gap-2">
                           <Calculator className="w-4 h-4" />
                           Ecohydrological Rain Retention Formula Disclosures
                         </h4>
-                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-slate-500 hover:text-slate-300">Close</button>
+                        <button onClick={() => setInspectingMetric(null)} className="text-xs text-white/40 hover:text-white/80 cursor-pointer">Close</button>
                       </div>
-                      <div className="text-xs text-slate-300 space-y-3 font-mono leading-relaxed">
+                      <div className="text-xs text-white/70 space-y-3 font-mono leading-relaxed">
                         <div>
-                          <span className="text-slate-500 block">Step 1: Determine Canopy Ground Area (A)</span>
-                          <span className="text-slate-400">Formula:</span> A = π * (Canopy_Diameter / 2)² = <span className="text-white">{metrics.canopyArea.toFixed(4)} m²</span>
+                          <span className="text-white/40 block">Step 1: Determine Canopy Ground Area (A)</span>
+                          <span className="text-white/60">Formula:</span> A = π * (Canopy_Diameter / 2)² = <span className="text-white">{metrics.canopyArea.toFixed(4)} m²</span>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Step 2: Apply Leaf Area Index (LAI) and Storage Capacity (Sc)</span>
-                          <span className="text-slate-400">Formula:</span> I = Sc * LAI * A<br/>
-                          <span className="text-slate-400">Parameters:</span> Sc (Canopy Capacity) = {activeSpecies.sc} mm | LAI = {activeSpecies.lai} m²/m²<br/>
-                          <span className="text-slate-500 block leading-relaxed">Note: Canopy capacity (mm) scales with leaf index, representing Liters of water held per square meter of leaf area before reaching the soil.</span>
-                          <span className="text-slate-400">Substitution:</span> I = {activeSpecies.sc} * {activeSpecies.lai} * {metrics.canopyArea.toFixed(4)}<br/>
+                          <span className="text-white/40 block">Step 2: Apply Leaf Area Index (LAI) and Storage Capacity (Sc)</span>
+                          <span className="text-white/60">Formula:</span> I = Sc * LAI * A<br/>
+                          <span className="text-white/60">Parameters:</span> Sc (Canopy Capacity) = {activeSpecies.sc} mm | LAI = {activeSpecies.lai} m²/m²<br/>
+                          <span className="text-white/40 block leading-relaxed">Note: Canopy capacity (mm) scales with leaf index, representing Liters of water held per square meter of leaf area before reaching the soil.</span>
+                          <span className="text-white/60">Substitution:</span> I = {activeSpecies.sc} * {activeSpecies.lai} * {metrics.canopyArea.toFixed(4)}<br/>
                           <span className="text-blue-400 font-bold">Calculated Water Storage:</span> <span className="text-blue-300 bg-blue-950 px-1.5 py-0.5 rounded border border-blue-500/20">{metrics.stormwater.toFixed(1)} Liters</span>
                         </div>
                       </div>
@@ -951,55 +921,55 @@ export default function EcoArborApp() {
 
         {/* Arbor Stand Synthesis Summary (Aggregate Dashboard) */}
         {logs.length > 0 && (
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl relative overflow-hidden">
+          <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-6">
               <div>
                 <h2 className="text-md font-bold text-white flex items-center gap-2">
                   <Layers className="w-5 h-5 text-emerald-400" />
                   Logged Arbor Stand Summary
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">Aggregated ecological impact of your customized forest stand</p>
+                <p className="text-xs text-white/60 mt-1">Aggregated ecological impact of your customized forest stand</p>
               </div>
-              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono text-slate-300">
+              <div className="flex items-center gap-2 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 text-xs font-mono text-white/80">
                 <span>Active Population:</span>
                 <span className="text-emerald-400 font-bold">{standTotals.count} trees</span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800 flex items-center gap-4">
+              <div className="bg-white/[0.02] backdrop-blur rounded-xl p-4 border border-white/10 flex items-center gap-4">
                 <div className="p-2.5 bg-emerald-950/80 rounded-lg text-emerald-400 border border-emerald-500/10">
                   <Leaf className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Total CO₂e Sequestered</span>
+                  <span className="text-[10px] uppercase font-semibold text-white/40 tracking-wider">Total CO₂e Sequestered</span>
                   <div className="text-lg font-bold text-white font-mono mt-0.5">
-                    {standTotals.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-slate-400 font-normal">kg</span>
+                    {standTotals.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-white/40 font-normal">kg</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800 flex items-center gap-4">
+              <div className="bg-white/[0.02] backdrop-blur rounded-xl p-4 border border-white/10 flex items-center gap-4">
                 <div className="p-2.5 bg-sky-950/80 rounded-lg text-sky-400 border border-sky-500/10">
                   <Wind className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Total PM2.5 Intercepted</span>
+                  <span className="text-[10px] uppercase font-semibold text-white/40 tracking-wider">Total PM2.5 Intercepted</span>
                   <div className="text-lg font-bold text-white font-mono mt-0.5">
-                    {standTotals.pm25.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-slate-400 font-normal">mg/hr</span>
+                    {standTotals.pm25.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-white/40 font-normal">mg/hr</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800 flex items-center gap-4">
+              <div className="bg-white/[0.02] backdrop-blur rounded-xl p-4 border border-white/10 flex items-center gap-4">
                 <div className="p-2.5 bg-blue-950/80 rounded-lg text-blue-400 border border-blue-500/10">
                   <Droplets className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Stormwater Storage Held</span>
+                  <span className="text-[10px] uppercase font-semibold text-white/40 tracking-wider">Stormwater Storage Held</span>
                   <div className="text-lg font-bold text-white font-mono mt-0.5">
-                    {standTotals.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-slate-400 font-normal">Liters</span>
+                    {standTotals.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs text-white/40 font-normal">Liters</span>
                   </div>
                 </div>
               </div>
@@ -1008,27 +978,27 @@ export default function EcoArborApp() {
         )}
 
         {/* Field Log Table */}
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-          <div className="px-6 py-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80">
+        <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 overflow-hidden">
+          <div className="px-6 py-5 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.02]">
             <div>
               <h2 className="text-md font-bold text-white flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-emerald-400" />
                 Arborist Field Report Log
               </h2>
-              <p className="text-xs text-slate-400 mt-1">Real-time database of surveyed tree inventory assets</p>
+              <p className="text-xs text-white/60 mt-1">Real-time database of surveyed tree inventory assets</p>
             </div>
             {logs.length > 0 && (
               <div className="flex gap-2">
                 <button 
                   onClick={handleDownloadCSV}
-                  className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95"
+                  className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download CSV
                 </button>
                 <button 
                   onClick={handleClearLogs}
-                  className="flex items-center gap-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-950/80 px-4 py-2.5 rounded-lg transition-colors border border-red-500/20 active:scale-95"
+                  className="flex items-center gap-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-950/60 px-4 py-2.5 rounded-lg transition-colors border border-red-500/20 active:scale-95 cursor-pointer shadow-md"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Clear Inventory
@@ -1041,7 +1011,25 @@ export default function EcoArborApp() {
             {logs.length > 0 ? (
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-[10px] text-slate-400 font-semibold uppercase tracking-wider bg-slate-950/40">
+                  <tr className="border-b border-white/10 text-[10px] text-white/60 font-semibold uppercase tracking-wider bg-white/[0.02]">
+                    <th className="px-6 py-4 text-center w-16">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <input 
+                          type="checkbox"
+                          className="rounded border-white/10 text-emerald-500 focus:ring-emerald-500/30 bg-slate-950 cursor-pointer w-3.5 h-3.5 accent-emerald-500"
+                          checked={logs.length > 0 && selectedLogIds.length === logs.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedLogIds(logs.map(log => log.id));
+                            } else {
+                              setSelectedLogIds([]);
+                            }
+                          }}
+                          title="Select / Deselect All Logs"
+                        />
+                        <span className="text-[9px] font-mono lowercase text-white/60">all</span>
+                      </div>
+                    </th>
                     <th className="px-6 py-4">ID</th>
                     <th className="px-6 py-4">Species Details</th>
                     <th className="px-6 py-4">DBH (cm)</th>
@@ -1052,7 +1040,7 @@ export default function EcoArborApp() {
                     <th className="px-6 py-4 text-center">Action</th>
                   </tr>
                 </thead>
-                <tbody className="text-xs divide-y divide-slate-800/60 font-mono text-slate-300 bg-slate-900/10">
+                <tbody className="text-xs divide-y divide-white/10 font-mono text-white/80 bg-transparent">
                   <AnimatePresence initial={false}>
                     {logs.map((log) => (
                       <motion.tr 
@@ -1062,17 +1050,32 @@ export default function EcoArborApp() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -15, transition: { duration: 0.15 } }}
                         transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                        className="hover:bg-slate-800/40 transition-colors"
+                        className={`hover:bg-slate-800/40 transition-colors ${selectedLogIds.includes(log.id) ? 'bg-emerald-950/5' : 'opacity-60 hover:opacity-100'}`}
                       >
-                        <td className="px-6 py-4 text-slate-500 font-bold">{log.id}</td>
-                        <td className="px-6 py-4">
-                          <div className="font-sans font-semibold text-slate-100">{log.speciesName}</div>
-                          <div className="text-[10px] text-slate-400 italic font-serif">{log.scientificName}</div>
+                        <td className="px-6 py-4 text-center w-16">
+                          <input 
+                            type="checkbox"
+                            className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500/30 bg-slate-950 cursor-pointer w-3.5 h-3.5 accent-emerald-500"
+                            checked={selectedLogIds.includes(log.id)}
+                            onChange={() => {
+                              setSelectedLogIds(prev => 
+                                prev.includes(log.id)
+                                  ? prev.filter(id => id !== log.id)
+                                  : [...prev, log.id]
+                              );
+                            }}
+                            title="Include in aggregate comparative chart"
+                          />
                         </td>
-                        <td className="px-6 py-4 font-semibold text-slate-200">{log.dbh.toFixed(1)}</td>
+                        <td className="px-6 py-4 text-white/40 font-bold">{log.id}</td>
                         <td className="px-6 py-4">
-                          <div className="text-slate-200">{log.canopyDiameter.toFixed(1)} m</div>
-                          <div className="text-[10px] text-slate-400">{log.canopyArea.toFixed(1)} m²</div>
+                          <div className="font-sans font-semibold text-white/90">{log.speciesName}</div>
+                          <div className="text-[10px] text-white/40 italic font-serif">{log.scientificName}</div>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-white/80">{log.dbh.toFixed(1)}</td>
+                        <td className="px-6 py-4">
+                          <div className="text-white/80">{log.canopyDiameter.toFixed(1)} m</div>
+                          <div className="text-[10px] text-white/40">{log.canopyArea.toFixed(1)} m²</div>
                         </td>
                         <td className="px-6 py-4 text-emerald-400 font-semibold">{log.co2e.toFixed(1)}</td>
                         <td className="px-6 py-4 text-sky-400 font-semibold">{log.pm25.toFixed(1)}</td>
@@ -1080,7 +1083,7 @@ export default function EcoArborApp() {
                         <td className="px-6 py-4 text-center">
                           <button 
                             onClick={() => handleDeleteLog(log.id)}
-                            className="p-1.5 hover:bg-red-950/80 rounded-lg text-slate-500 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/20 cursor-pointer"
+                            className="p-1.5 hover:bg-red-950/80 rounded-lg text-white/40 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/20 cursor-pointer"
                             title="Delete Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1092,24 +1095,15 @@ export default function EcoArborApp() {
                 </tbody>
               </table>
             ) : (
-              <div className="py-16 text-center space-y-3 bg-slate-900/20">
-                <div className="inline-flex p-3 bg-slate-800/60 text-slate-500 rounded-2xl border border-slate-800">
+              <div className="py-16 text-center space-y-3 bg-white/[0.01]">
+                <div className="inline-flex p-3 bg-white/[0.02] text-white/40 rounded-2xl border border-white/10">
                   <TreeDeciduous className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-300">No tree inventory assets logged yet</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                  <h3 className="text-sm font-semibold text-white/80">No tree inventory assets logged yet</h3>
+                  <p className="text-xs text-white/40 max-w-sm mx-auto mt-1 leading-relaxed">
                     Set your morphological dimensions in the sidebar, choose a peer-reviewed species dataset, and log your first surveyed asset.
                   </p>
-                </div>
-                <div className="pt-2">
-                  <button 
-                    onClick={handleLoadSampleStand}
-                    className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/20 px-4 py-2.5 rounded-lg transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Load Sample Forest Inventory
-                  </button>
                 </div>
               </div>
             )}
@@ -1117,45 +1111,45 @@ export default function EcoArborApp() {
         </div>
 
         {/* Comparative Benefit Analysis Chart */}
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+        <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
               <h2 className="text-md font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-emerald-400" />
                 Comparative Benefit Analytics
               </h2>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-white/60 mt-1">
                 A side-by-side performance evaluation of the current model against logged stand aggregates.
               </p>
             </div>
             {/* Metric select buttons */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 self-start md:self-auto">
+            <div className="flex bg-white/[0.02] backdrop-blur-md p-1 rounded-xl border border-white/10 self-start md:self-auto gap-1">
               <button
                 onClick={() => setChartMetric('carbon')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
                   chartMetric === 'carbon'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-lg shadow-emerald-500/10'
+                    : 'text-white/60 border-transparent hover:bg-white/[0.02] hover:text-white/90'
                 }`}
               >
                 Carbon Sequestration
               </button>
               <button
                 onClick={() => setChartMetric('pm25')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
                   chartMetric === 'pm25'
-                    ? 'bg-sky-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-teal-500/20 text-teal-300 border-teal-500/30 shadow-lg shadow-teal-500/10'
+                    : 'text-white/60 border-transparent hover:bg-white/[0.02] hover:text-white/90'
                 }`}
               >
                 Air Quality
               </button>
               <button
                 onClick={() => setChartMetric('stormwater')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
                   chartMetric === 'stormwater'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/30 shadow-lg shadow-sky-500/10'
+                    : 'text-white/60 border-transparent hover:bg-white/[0.02] hover:text-white/90'
                 }`}
               >
                 Hydrology
@@ -1168,39 +1162,39 @@ export default function EcoArborApp() {
               {/* Stats card column */}
               <div className="lg:col-span-4 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
-                  <div className="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Current Model contribution</span>
+                  <div className="bg-white/[0.02] rounded-xl p-4 border border-white/10">
+                    <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Current Model contribution</span>
                     <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
                       {chartMetric === 'carbon' && `${metrics.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg CO₂e`}
                       {chartMetric === 'pm25' && `${metrics.pm25Intercepted.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`}
                       {chartMetric === 'stormwater' && `${metrics.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                    <p className="text-[10px] text-white/60 mt-1 leading-relaxed">
                       Based on current interactive slider configurations ({dbh.toFixed(1)} cm DBH, {canopyDiameter.toFixed(1)} m canopy).
                     </p>
                   </div>
 
-                  <div className="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Stand Cumulative Total</span>
+                  <div className="bg-white/[0.02] rounded-xl p-4 border border-white/10">
+                    <span className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Selected Stand Total</span>
                     <div className="text-xl font-bold font-mono text-blue-400 mt-1">
-                      {chartMetric === 'carbon' && `${standTotals.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg CO₂e`}
-                      {chartMetric === 'pm25' && `${standTotals.pm25.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`}
-                      {chartMetric === 'stormwater' && `${standTotals.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`}
+                      {chartMetric === 'carbon' && `${selectedTotals.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg CO₂e`}
+                      {chartMetric === 'pm25' && `${selectedTotals.pm25.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`}
+                      {chartMetric === 'stormwater' && `${selectedTotals.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                      Aggregated across the {standTotals.count} currently registered inventory assets.
+                    <p className="text-[10px] text-white/60 mt-1 leading-relaxed">
+                      Aggregated across the {selectedTotals.count} selected inventory assets (out of {logs.length} total).
                     </p>
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800 text-[10px] text-slate-400 leading-relaxed">
-                  <Info className="w-3.5 h-3.5 text-slate-500 inline-block mr-1 align-text-bottom" />
-                  Compare the relative performance of your single current model against your entire logged collection. Values update instantaneously as parameters change.
+                <div className="p-3 bg-white/[0.01] rounded-xl border border-white/10 text-[10px] text-white/40 leading-relaxed">
+                  <Info className="w-3.5 h-3.5 text-white/40 inline-block mr-1 align-text-bottom" />
+                  Compare the relative performance of your single current model against selected logged assets. Use checkboxes in the Field Report to toggle inclusion.
                 </div>
               </div>
 
               {/* Recharts chart render */}
-              <div className="lg:col-span-8 bg-slate-950/50 rounded-xl p-4 border border-slate-800/80 h-[280px]">
+              <div className="lg:col-span-8 bg-white/[0.02] rounded-xl p-4 border border-white/10 h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={[
@@ -1214,12 +1208,12 @@ export default function EcoArborApp() {
                         color: chartMetric === 'carbon' ? '#10b981' : chartMetric === 'pm25' ? '#0ea5e9' : '#3b82f6',
                       },
                       {
-                        name: 'Stand Cumulative Total',
+                        name: 'Selected Stand Total',
                         value: chartMetric === 'carbon' 
-                          ? standTotals.co2e 
+                          ? selectedTotals.co2e 
                           : chartMetric === 'pm25' 
-                          ? standTotals.pm25 
-                          : standTotals.stormwater,
+                          ? selectedTotals.pm25 
+                          : selectedTotals.stormwater,
                         color: '#6366f1',
                       }
                     ]}
@@ -1277,33 +1271,33 @@ export default function EcoArborApp() {
               </div>
             </div>
           ) : (
-            <div className="h-[280px] bg-slate-950/40 rounded-xl flex items-center justify-center text-slate-500 font-mono text-xs">
+            <div className="h-[280px] bg-white/[0.02] rounded-xl border border-white/10 flex items-center justify-center text-white/40 font-mono text-xs">
               Initializing Analytics Modules...
             </div>
           )}
         </div>
 
         {/* Methodology & Background Documentation */}
-        <section id="methodology" className="bg-slate-900 rounded-2xl border border-slate-800 p-6 space-y-4">
-          <h3 className="text-md font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+        <section id="methodology" className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 space-y-4 animate-in">
+          <h3 className="text-md font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
             <Info className="w-4 h-4 text-emerald-400" />
             Theoretical Framework & Scientific References
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-400 leading-relaxed">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-white/60 leading-relaxed">
             <div className="space-y-2">
-              <h4 className="font-semibold text-slate-200 uppercase tracking-wider text-[10px]">Allometric Dry Biomass</h4>
+              <h4 className="font-semibold text-white/80 uppercase tracking-wider text-[10px]">Allometric Dry Biomass</h4>
               <p>
                 Equations utilize power-law relationships established by the Forest Research Institute of India (FRI) and western sylvicultural stations. Species-specific parameters map trunk Diameter at Breast Height (DBH) to aboveground dry weight, with a standard carbon mass fraction assumption of 50%.
               </p>
             </div>
             <div className="space-y-2">
-              <h4 className="font-semibold text-slate-200 uppercase tracking-wider text-[10px]">i-Tree PM2.5 Deposition</h4>
+              <h4 className="font-semibold text-white/80 uppercase tracking-wider text-[10px]">i-Tree PM2.5 Deposition</h4>
               <p>
                 Modeled after the US Forest Service i-Tree Eco methodology. Deposition velocity (Vd) is dynamically adjusted for local wind speed and species-specific leaf morphology. Needle structure in conifers provides greater turbulence, accelerating deposition relative to smoother deciduous surfaces.
               </p>
             </div>
             <div className="space-y-2">
-              <h4 className="font-semibold text-slate-200 uppercase tracking-wider text-[10px]">Ecohydrological Rain Retention</h4>
+              <h4 className="font-semibold text-white/80 uppercase tracking-wider text-[10px]">Ecohydrological Rain Retention</h4>
               <p>
                 Stormwater mitigations scale with Canopy Water Storage capacity (Sc) and Leaf Area Index (LAI). Leaf Area Index measures multi-layered canopy density per square meter of ground projection, which dictates the total holding volume of rainfall before stemflow or canopy saturation occurs.
               </p>
