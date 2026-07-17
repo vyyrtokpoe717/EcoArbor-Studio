@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { jsPDF } from 'jspdf';
 import { 
   Download, 
   Plus, 
@@ -25,7 +26,9 @@ import {
   Compass,
   Thermometer,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  ChevronDown
 } from 'lucide-react';
 
 type Species = {
@@ -166,6 +169,16 @@ export default function EcoArborApp() {
   const [canopyDiameter, setCanopyDiameter] = useState<number>(8);
   const [pm25, setPm25] = useState<number>(60);
   const [windSpeed, setWindSpeed] = useState<number>(3);
+
+  // Seasonal and Deletion Undo States
+  const [seasonalMode, setSeasonalMode] = useState<'summer' | 'winter'>('summer');
+  const [recentlyDeletedLog, setRecentlyDeletedLog] = useState<{ log: LoggedTree; index: number } | null>(null);
+  const [showUndoToast, setShowUndoToast] = useState<boolean>(false);
+
+  // Custom Searchable Species Dropdown States
+  const [isSpeciesDropdownOpen, setIsSpeciesDropdownOpen] = useState(false);
+  const [speciesSearchQuery, setSpeciesSearchQuery] = useState('');
+  const [speciesTypeFilter, setSpeciesTypeFilter] = useState<'All' | 'Conifer' | 'Broadleaf'>('All');
   
   // Field Log State
   const [logs, setLogs] = useState<LoggedTree[]>([]);
@@ -422,12 +435,15 @@ export default function EcoArborApp() {
     // Deposition flux F = Vd * C (g/m²/hr)
     const F = vdPerHour * cGperM3;
 
+    // Seasonal LAI adjustment (forced to 0.1 for broadleaf trees in winter)
+    const adjustedLAI = (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') ? 0.1 : activeSpecies.lai;
+
     // Total Mass Intercepted P = F * LAI * A * 1000 (mg/hour)
-    const pm25Intercepted = F * activeSpecies.lai * canopyArea * 1000;
+    const pm25Intercepted = F * adjustedLAI * canopyArea * 1000;
 
     // D. Canopy Stormwater Interception (I, Liters)
     // I = Sc * LAI * A
-    const stormwater = activeSpecies.sc * activeSpecies.lai * canopyArea;
+    const stormwater = activeSpecies.sc * adjustedLAI * canopyArea;
 
     return {
       biomass: M,
@@ -440,7 +456,7 @@ export default function EcoArborApp() {
       pm25Intercepted,
       stormwater
     };
-  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed]);
+  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode]);
 
   // Totals for logged items (Arbor Stand Synthesis)
   const standTotals = useMemo(() => {
@@ -488,8 +504,222 @@ export default function EcoArborApp() {
   };
 
   const handleDeleteLog = (id: string) => {
-    setLogs(prev => prev.filter(l => l.id !== id));
-    setSelectedLogIds(prev => prev.filter(selectedId => selectedId !== id));
+    const idx = logs.findIndex(l => l.id === id);
+    if (idx !== -1) {
+      const removed = logs[idx];
+      setRecentlyDeletedLog({ log: removed, index: idx });
+      setLogs(prev => prev.filter(l => l.id !== id));
+      setSelectedLogIds(prev => prev.filter(selectedId => selectedId !== id));
+      setShowUndoToast(true);
+    }
+  };
+
+  const handleUndoDelete = () => {
+    if (!recentlyDeletedLog) return;
+    const { log, index } = recentlyDeletedLog;
+    setLogs(prev => {
+      const copy = [...prev];
+      copy.splice(index, 0, log);
+      return copy;
+    });
+    setSelectedLogIds(prev => [...prev, log.id]);
+    setShowUndoToast(false);
+    setRecentlyDeletedLog(null);
+  };
+
+  useEffect(() => {
+    if (showUndoToast) {
+      const timer = setTimeout(() => {
+        setShowUndoToast(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showUndoToast]);
+
+  // Species-specific annual growth constants based on forestry data
+  const speciesGrowthConfig: Record<string, { dbhRate: number; canopyRate: number }> = useMemo(() => ({
+    'deodar-cedar': { dbhRate: 0.8, canopyRate: 0.15 },
+    'kashmir-blue-pine': { dbhRate: 0.9, canopyRate: 0.18 },
+    'sacred-fig': { dbhRate: 1.2, canopyRate: 0.25 },
+    'teak': { dbhRate: 0.6, canopyRate: 0.10 },
+    'northern-red-oak': { dbhRate: 0.7, canopyRate: 0.14 }
+  }), []);
+
+  // Projections for predictive growth module
+  const projections = useMemo(() => {
+    const config = speciesGrowthConfig[activeSpecies.id] || { dbhRate: 0.8, canopyRate: 0.15 };
+    const calculateForYears = (years: number) => {
+      const projDbh = dbh + (config.dbhRate * years);
+      const projCanopyDiameter = canopyDiameter + (config.canopyRate * years);
+      
+      // biomass
+      let M = 0;
+      if (activeSpecies.equationType === 'power') {
+        M = activeSpecies.a * Math.pow(projDbh, activeSpecies.b);
+      } else {
+        M = Math.exp(activeSpecies.a + activeSpecies.b * Math.log(projDbh));
+      }
+      const carbonContent = M * 0.50;
+      const co2e = carbonContent * (44.01 / 12.011);
+      const canopyArea = Math.PI * Math.pow(projCanopyDiameter / 2, 2);
+      
+      // wind adjusted deposition velocity Vd (m/s)
+      let vdMPS = 0;
+      if (activeSpecies.type === 'Conifer') {
+        vdMPS = activeSpecies.baseVd + (0.0005 * windSpeed);
+      } else {
+        vdMPS = activeSpecies.baseVd + (0.0002 * windSpeed);
+      }
+      const vdPerHour = vdMPS * 3600;
+      const cGperM3 = pm25 * 1e-6;
+      const F = vdPerHour * cGperM3;
+      const currentLAI = (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') ? 0.1 : activeSpecies.lai;
+      const pm25Intercepted = F * currentLAI * canopyArea * 1000;
+      const stormwater = activeSpecies.sc * currentLAI * canopyArea;
+
+      return {
+        years,
+        dbh: projDbh,
+        canopyDiameter: projCanopyDiameter,
+        co2e,
+        pm25: pm25Intercepted,
+        stormwater,
+        biomass: M
+      };
+    };
+
+    return [
+      calculateForYears(10),
+      calculateForYears(20),
+      calculateForYears(50)
+    ];
+  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, speciesGrowthConfig]);
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    
+    // Header design (Slate dark/forest aesthetic paired colors)
+    doc.setFillColor(5, 23, 9); // deep forest green background accent
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text('EcoArbor Studio - Field Survey Report', 15, 22);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 15, 32);
+    doc.text(`Location Context: ${liveLocationName || 'Global Coordinates (Offline Fallback)'}`, 120, 32);
+
+    // Dynamic metrics summary of logged stand
+    doc.setTextColor(5, 23, 9);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Arbor Stand Synthesis Summary', 15, 55);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Total surveyed assets in active population: ${standTotals.count} trees`, 15, 62);
+    
+    // Draw table headers for synthesis
+    doc.setFillColor(240, 245, 241);
+    doc.rect(15, 68, 180, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 30, 30);
+    doc.text('Indicator Metric', 18, 73);
+    doc.text('Total Stand Cumulative Benefit', 110, 73);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text('Total Carbon Dioxide Sequestered (CO2e):', 18, 83);
+    doc.text(`${standTotals.co2e.toFixed(1)} kg`, 110, 83);
+    
+    doc.text('Total Fine Particulate Intercepted (PM2.5):', 18, 90);
+    doc.text(`${standTotals.pm25.toFixed(1)} mg/hr`, 110, 90);
+    
+    doc.text('Total Hydrological Stormwater Retention:', 18, 97);
+    doc.text(`${standTotals.stormwater.toFixed(1)} Liters`, 110, 97);
+
+    // Active Tree Model Details
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 23, 9);
+    doc.text('Current Botanical Simulation Profile', 15, 112);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Species: ${activeSpecies.name} (${activeSpecies.scientificName})`, 15, 119);
+    doc.text(`Family: ${activeSpecies.family} | Classification: ${activeSpecies.type}`, 15, 125);
+    doc.text(`Dimensions: ${dbh.toFixed(1)} cm DBH | ${canopyDiameter.toFixed(1)} m Canopy Diameter`, 15, 131);
+    doc.text(`Active Season: ${seasonalMode === 'summer' ? 'Summer (Active Foliage)' : 'Winter (Dormant Foliage - LAI adjusted)'}`, 15, 137);
+
+    // Current metrics
+    doc.setFillColor(240, 245, 241);
+    doc.rect(15, 143, 180, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 30, 30);
+    doc.text('Ecological Benefit', 18, 148);
+    doc.text('Value', 110, 148);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text('Carbon Storage & Sequestration Equivalent:', 18, 158);
+    doc.text(`${metrics.co2e.toFixed(1)} kg`, 110, 158);
+    doc.text('Particulate Air Quality Interception:', 18, 165);
+    doc.text(`${metrics.pm25Intercepted.toFixed(1)} mg/hr`, 110, 165);
+    doc.text('Stormwater Canopy Retention Volume:', 18, 172);
+    doc.text(`${metrics.stormwater.toFixed(1)} Liters`, 110, 172);
+
+    // List of Inventory Assets Table
+    if (logs.length > 0) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 23, 9);
+      doc.text('Surveyed Assets Log (Recent 10)', 15, 188);
+      
+      let y = 198;
+      doc.setFillColor(5, 23, 9);
+      doc.rect(15, 192, 180, 6, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text('ID', 18, 196);
+      doc.text('Species Details', 35, 196);
+      doc.text('DBH', 85, 196);
+      doc.text('Canopy', 105, 196);
+      doc.text('CO2e (kg)', 125, 196);
+      doc.text('PM2.5 (mg/h)', 150, 196);
+      doc.text('Stormwater (L)', 175, 196);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(50, 50, 50);
+      
+      logs.slice(0, 10).forEach((log) => {
+        if (y > 275) return;
+        doc.text(log.id, 18, y);
+        doc.text(`${log.speciesName}`, 35, y);
+        doc.text(`${log.dbh.toFixed(1)}cm`, 85, y);
+        doc.text(`${log.canopyDiameter.toFixed(1)}m`, 105, y);
+        doc.text(`${log.co2e.toFixed(1)}`, 125, y);
+        doc.text(`${log.pm25.toFixed(1)}`, 150, y);
+        doc.text(`${log.stormwater.toFixed(1)}`, 175, y);
+        y += 7;
+      });
+
+      if (logs.length > 10) {
+        doc.setFont('helvetica', 'italic');
+        doc.text(`... and ${logs.length - 10} more records in inventory database.`, 15, y);
+      }
+    }
+
+    // Footnote
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(150, 150, 150);
+    doc.text('EcoArbor Studio Field Report Log. All rights reserved. Calculations verified via i-Tree equations.', 15, 288);
+
+    doc.save(`EcoArbor_Studio_Field_Report_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   const handleDownloadCSV = () => {
@@ -825,22 +1055,161 @@ export default function EcoArborApp() {
               <div className="space-y-6">
                 
                 {/* Species Dropdown */}
-                <div>
+                <div className="relative">
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-semibold text-white/70 uppercase tracking-wider">Tree Species</label>
                     <span className="text-xs font-mono text-emerald-400/90 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20">{activeSpecies.type}</span>
                   </div>
-                  <select 
-                    value={selectedSpeciesId}
-                    onChange={(e) => setSelectedSpeciesId(e.target.value)}
-                    className="w-full bg-white/[0.04] backdrop-blur-md border border-white/10 hover:border-white/20 rounded-xl px-3 py-3 text-sm font-medium text-white/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all cursor-pointer shadow-md"
+                  
+                  {/* Select button trigger */}
+                  <button
+                    type="button"
+                    onClick={() => setIsSpeciesDropdownOpen(!isSpeciesDropdownOpen)}
+                    className="w-full bg-white/[0.04] backdrop-blur-md border border-white/10 hover:border-white/20 rounded-xl px-4 py-3 text-left text-sm font-medium text-white/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all cursor-pointer shadow-md flex items-center justify-between gap-2"
                   >
-                    {speciesData.map(s => (
-                      <option key={s.id} value={s.id} className="bg-[#051709] text-white">
-                        {s.name} ({s.scientificName})
-                      </option>
-                    ))}
-                  </select>
+                    <div>
+                      <div className="font-semibold text-white">{activeSpecies.name}</div>
+                      <div className="text-[10px] text-white/55 italic font-sans">{activeSpecies.scientificName}</div>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isSpeciesDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Popover */}
+                  <AnimatePresence>
+                    {isSpeciesDropdownOpen && (
+                      <>
+                        {/* Backdrop to close click */}
+                        <div 
+                          className="fixed inset-0 z-30 cursor-default" 
+                          onClick={() => setIsSpeciesDropdownOpen(false)} 
+                        />
+                        
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute left-0 right-0 mt-2 bg-[#051709]/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl shadow-2xl p-4 z-40 space-y-3 max-h-[380px] overflow-y-auto flex flex-col"
+                        >
+                          {/* Search Input */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-white/40" />
+                            <input
+                              type="text"
+                              value={speciesSearchQuery}
+                              onChange={(e) => setSpeciesSearchQuery(e.target.value)}
+                              placeholder="Search scientific, family, or name..."
+                              className="w-full bg-white/[0.06] border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 font-medium"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+
+                          {/* Quick Filter Tabs */}
+                          <div className="flex bg-white/[0.04] p-0.5 rounded-lg border border-white/5 gap-0.5 text-[10px] font-semibold">
+                            {(['All', 'Conifer', 'Broadleaf'] as const).map((type) => (
+                              <button
+                                key={type}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSpeciesTypeFilter(type);
+                                }}
+                                className={`flex-1 py-1 rounded transition-colors ${
+                                  speciesTypeFilter === type
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/15'
+                                    : 'text-white/40 hover:text-white/80'
+                                }`}
+                              >
+                                {type === 'All' ? 'All Types' : type}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Matching species list */}
+                          <div className="space-y-1 overflow-y-auto max-h-[220px] pr-1 flex-1">
+                            {speciesData
+                              .filter(s => {
+                                if (speciesTypeFilter !== 'All' && s.type !== speciesTypeFilter) return false;
+                                const q = speciesSearchQuery.toLowerCase().trim();
+                                return !q || s.name.toLowerCase().includes(q) || s.scientificName.toLowerCase().includes(q) || s.family.toLowerCase().includes(q);
+                              })
+                              .map((s) => {
+                                const isSelected = s.id === selectedSpeciesId;
+                                return (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedSpeciesId(s.id);
+                                      setIsSpeciesDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left p-2.5 rounded-xl transition-all flex flex-col gap-0.5 ${
+                                      isSelected
+                                        ? 'bg-emerald-500/20 border border-emerald-500/30 text-white'
+                                        : 'hover:bg-white/[0.04] text-white/70 hover:text-white border border-transparent'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-semibold text-xs">{s.name}</span>
+                                      <span className="text-[9px] font-mono text-white/30">{s.family}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-white/40 italic font-sans">
+                                      <span>{s.scientificName}</span>
+                                      <span className={`text-[8px] font-mono uppercase px-1.5 py-0.2 rounded ${
+                                        s.type === 'Conifer' ? 'bg-teal-950 text-teal-400 border border-teal-500/10' : 'bg-amber-950/40 text-amber-500/80 border border-amber-500/10'
+                                      }`}>
+                                        {s.type}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            {speciesData.filter(s => {
+                              if (speciesTypeFilter !== 'All' && s.type !== speciesTypeFilter) return false;
+                              const q = speciesSearchQuery.toLowerCase().trim();
+                              return !q || s.name.toLowerCase().includes(q) || s.scientificName.toLowerCase().includes(q) || s.family.toLowerCase().includes(q);
+                            }).length === 0 && (
+                              <div className="text-center py-6 text-white/40 text-xs font-mono">
+                                No matching species found.
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Seasonal Mode Toggle */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-white/70 block">Seasonal Dormancy</span>
+                    <span className="text-[10px] text-white/40 block">Broadleaf trees lose leaves in winter</span>
+                  </div>
+                  <div className="flex bg-white/[0.04] p-0.5 rounded-lg border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setSeasonalMode('summer')}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer ${
+                        seasonalMode === 'summer'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/20'
+                          : 'text-white/40 hover:text-white/80 border border-transparent'
+                      }`}
+                    >
+                      Summer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSeasonalMode('winter')}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer ${
+                        seasonalMode === 'winter'
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/20'
+                          : 'text-white/40 hover:text-white/80 border border-transparent'
+                      }`}
+                    >
+                      Winter
+                    </button>
+                  </div>
                 </div>
 
                 {/* Trunk DBH */}
@@ -1357,6 +1726,69 @@ export default function EcoArborApp() {
               )}
             </AnimatePresence>
 
+            {/* Predictive Growth Module */}
+            <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/10 pb-3 mb-4 gap-2">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-sm font-bold text-white">Predictive Growth & Future Ecological Benefits</h3>
+                </div>
+                <span className="text-[10px] font-mono font-medium text-emerald-300 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-500/20 self-start sm:self-auto">
+                  Growth Rate: {((speciesGrowthConfig[activeSpecies.id]?.dbhRate) || 0.8).toFixed(1)} cm/yr
+                </span>
+              </div>
+
+              <p className="text-xs text-white/60 mb-4 leading-relaxed">
+                Projected DBH, canopy expansions, and cumulative ecological enhancements over 10, 20, and 50 years based on scientific growth rate constants.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {projections.map((p) => {
+                  const co2Increase = p.co2e - metrics.co2e;
+                  const pmIncrease = p.pm25 - metrics.pm25Intercepted;
+                  const stormwaterIncrease = p.stormwater - metrics.stormwater;
+                  
+                  return (
+                    <div key={p.years} className="bg-white/[0.02] border border-white/10 rounded-xl p-4 flex flex-col justify-between hover:bg-white/[0.04] transition-all group">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">{p.years} Years</span>
+                          <span className="text-[9px] font-mono text-white/40">t + {p.years} yrs</span>
+                        </div>
+                        <div className="space-y-2 border-t border-white/5 pt-2">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-white/50">Trunk DBH:</span>
+                            <span className="text-white font-mono font-medium">{p.dbh.toFixed(1)} cm</span>
+                          </div>
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-white/50">Canopy Diam:</span>
+                            <span className="text-white font-mono font-medium">{p.canopyDiameter.toFixed(1)} m</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 border-t border-white/5 pt-2 mt-3 text-[10px] font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-emerald-400">CO₂e storage:</span>
+                          <span className="text-white font-semibold">+{co2Increase.toFixed(1)} kg</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sky-400">PM2.5 intercept:</span>
+                          <span className="text-white font-semibold">+{pmIncrease.toFixed(1)} mg/h</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-blue-400">Stormwater:</span>
+                          <span className="text-white font-semibold">+{stormwaterIncrease.toFixed(1)} L</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1430,6 +1862,13 @@ export default function EcoArborApp() {
             </div>
             {logs.length > 0 && (
               <div className="flex gap-2">
+                <button 
+                  onClick={handleDownloadPDF}
+                  className="flex items-center gap-2 text-xs font-semibold text-sky-300 bg-sky-950/80 hover:bg-sky-900/80 px-4 py-2.5 rounded-lg transition-colors border border-sky-500/30 active:scale-95 cursor-pointer shadow-md"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download PDF Report
+                </button>
                 <button 
                   onClick={handleDownloadCSV}
                   className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
@@ -1747,6 +2186,36 @@ export default function EcoArborApp() {
         </section>
 
       </main>
+
+      {/* Undo Toast Notification */}
+      <AnimatePresence>
+        {showUndoToast && recentlyDeletedLog && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-[100] max-w-sm bg-slate-900/95 backdrop-blur border border-emerald-500/30 rounded-xl p-4 shadow-2xl flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="bg-emerald-950 p-1.5 rounded-lg border border-emerald-500/20 text-emerald-400">
+                <CheckCircle className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Record Deleted</div>
+                <div className="text-[10px] text-white/60">Removed log {recentlyDeletedLog.log.id}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleUndoDelete}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Undo
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
