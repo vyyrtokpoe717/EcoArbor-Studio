@@ -22,6 +22,7 @@ import {
   CheckCircle,
   HelpCircle,
   CloudSun,
+  Snowflake,
   MapPin,
   Compass,
   Thermometer,
@@ -178,6 +179,9 @@ export default function EcoArborApp() {
 
   // Seasonal State Toggle
   const [seasonalMode, setSeasonalMode] = useState<'summer' | 'winter'>('summer');
+
+  // Botanical Growth Projections Compounding Expander State
+  const [expandedCompoundingYear, setExpandedCompoundingYear] = useState<number | null>(null);
 
   // Custom Dropdown & Filtering States
   const [isSpeciesDropdownOpen, setIsSpeciesDropdownOpen] = useState(false);
@@ -563,7 +567,7 @@ export default function EcoArborApp() {
 
     const canopyGrowthPerYear = dbhGrowthPerYear * 0.2; 
 
-    const getMetricsForDimensions = (projectedDbh: number, projectedCanopyDiam: number) => {
+    const getMetricsForDimensions = (projectedDbh: number, projectedCanopyDiam: number, horizonYears: number) => {
       let M = 0;
       if (activeSpecies.equationType === 'power') {
         M = activeSpecies.a * Math.pow(projectedDbh, activeSpecies.b);
@@ -589,15 +593,30 @@ export default function EcoArborApp() {
       const pm25Intercepted = F * activeLai * canopyArea * 1000;
       const stormwater = activeSc * activeLai * canopyArea;
 
-      return { dbh: projectedDbh, canopyDiameter: projectedCanopyDiam, co2e, pm25: pm25Intercepted, stormwater };
+      const netCo2Gain = Math.max(0, co2e - metrics.co2e);
+      const avgAnnualRate = netCo2Gain / horizonYears;
+      const carMilesEquivalent = co2e / 0.404; // 0.404 kg CO2 per mile driven
+      const matureTreeYearsEquiv = co2e / 21.8; // ~21.8 kg CO2/yr for mature tree
+
+      return { 
+        dbh: projectedDbh, 
+        canopyDiameter: projectedCanopyDiam, 
+        co2e, 
+        pm25: pm25Intercepted, 
+        stormwater,
+        netCo2Gain,
+        avgAnnualRate,
+        carMilesEquivalent,
+        matureTreeYearsEquiv
+      };
     };
 
     return [
-      { year: 10, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 10, canopyDiameter + canopyGrowthPerYear * 10) },
-      { year: 20, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 20, canopyDiameter + canopyGrowthPerYear * 20) },
-      { year: 50, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 50, canopyDiameter + canopyGrowthPerYear * 50) },
+      { year: 10, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 10, canopyDiameter + canopyGrowthPerYear * 10, 10) },
+      { year: 20, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 20, canopyDiameter + canopyGrowthPerYear * 20, 20) },
+      { year: 50, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 50, canopyDiameter + canopyGrowthPerYear * 50, 50) },
     ];
-  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode]);
+  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, metrics.co2e]);
 
   // Totals for logged items (Arbor Stand Synthesis)
   const standTotals = useMemo(() => {
@@ -1118,36 +1137,50 @@ export default function EcoArborApp() {
               <div className="space-y-6">
                 
                 {/* Seasonal State Selector */}
-                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between shadow-inner">
-                  <div>
-                    <span className="text-xs font-semibold text-white/80 block">Seasonal Engine</span>
-                    <span className="text-[10px] text-white/40 mt-0.5 block">Simulates leaf loss metrics</span>
-                  </div>
-                  <div className="flex bg-slate-950 p-1 rounded-lg border border-white/10 gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setSeasonalMode('summer')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        seasonalMode === 'summer'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'text-white/40 hover:text-white/80 border border-transparent'
-                      }`}
-                    >
-                      <CloudSun className="w-3.5 h-3.5" />
-                      Summer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSeasonalMode('winter')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                        seasonalMode === 'winter'
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                          : 'text-white/40 hover:text-white/80 border border-transparent'
-                      }`}
-                    >
-                      <Activity className="w-3.5 h-3.5" />
-                      Winter
-                    </button>
+                <div className="bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-xl p-3 space-y-2.5 shadow-sm transition-all hover:border-white/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg border ${
+                        seasonalMode === 'summer' 
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
+                          : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                      }`}>
+                        {seasonalMode === 'summer' ? <CloudSun className="w-4 h-4" /> : <Snowflake className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-white/90 block">Seasonal Engine</span>
+                        <span className="text-[10px] text-white/40 block">
+                          {seasonalMode === 'summer' ? 'Peak Leaf Area Index' : 'Winter Leaf Attenuation'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex bg-white/[0.04] p-1 rounded-lg border border-white/10 gap-1 shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => setSeasonalMode('summer')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                          seasonalMode === 'summer'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm'
+                            : 'text-white/40 hover:text-white/80 border border-transparent hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <CloudSun className="w-3 h-3" />
+                        Summer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSeasonalMode('winter')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                          seasonalMode === 'winter'
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm'
+                            : 'text-white/40 hover:text-white/80 border border-transparent hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <Snowflake className="w-3 h-3" />
+                        Winter
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1857,15 +1890,15 @@ export default function EcoArborApp() {
                           <span className="text-[10px] font-mono text-white/30">Target Year {new Date().getFullYear() + projection.year}</span>
                         </div>
 
-                        {/* Dimensions */}
-                        <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-white/5 mb-4 text-center">
-                          <div>
-                            <span className="text-[9px] uppercase tracking-wider font-semibold text-white/30 block">DBH</span>
-                            <span className="text-xs font-mono font-bold text-white/95">{projection.dbh.toFixed(1)} cm</span>
+                        {/* Dimensions Glass Card */}
+                        <div className="grid grid-cols-2 gap-2 bg-white/[0.03] backdrop-blur-md p-2.5 rounded-xl border border-white/10 mb-4 text-center shadow-inner">
+                          <div className="flex flex-col items-center justify-center p-1">
+                            <span className="text-[9px] uppercase tracking-wider font-bold text-emerald-400/80 block mb-0.5">Projected DBH</span>
+                            <span className="text-xs font-mono font-bold text-white/90">{projection.dbh.toFixed(1)} <span className="text-[10px] text-white/40 font-normal">cm</span></span>
                           </div>
-                          <div className="border-l border-white/5">
-                            <span className="text-[9px] uppercase tracking-wider font-semibold text-white/30 block">Canopy</span>
-                            <span className="text-xs font-mono font-bold text-white/95">{projection.canopyDiameter.toFixed(1)} m</span>
+                          <div className="flex flex-col items-center justify-center p-1 border-l border-white/10">
+                            <span className="text-[9px] uppercase tracking-wider font-bold text-sky-400/80 block mb-0.5">Projected Canopy</span>
+                            <span className="text-xs font-mono font-bold text-white/90">{projection.canopyDiameter.toFixed(1)} <span className="text-[10px] text-white/40 font-normal">m</span></span>
                           </div>
                         </div>
 
@@ -1900,9 +1933,62 @@ export default function EcoArborApp() {
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-white/30">
-                        <span>Compounding Sequestration</span>
-                        <ChevronDown className="w-3 h-3 text-white/20 -rotate-90" />
+                      {/* Interactive Compounding Sequestration Drawer */}
+                      <div className="mt-4 pt-3 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCompoundingYear(expandedCompoundingYear === projection.year ? null : projection.year)}
+                          className="w-full flex items-center justify-between text-xs font-medium text-white/80 hover:text-white transition-all p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 cursor-pointer group shadow-sm"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400/80 group-hover:text-emerald-400 transition-colors" />
+                            <span>Compounding Sequestration</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-white/40 group-hover:text-white/60 font-mono transition-colors">
+                              {expandedCompoundingYear === projection.year ? 'Hide' : 'Metrics'}
+                            </span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition-transform duration-200 ${expandedCompoundingYear === projection.year ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        <AnimatePresence>
+                          {expandedCompoundingYear === projection.year && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden mt-3"
+                            >
+                              <div className="p-3 bg-white/[0.03] backdrop-blur-md rounded-xl border border-white/10 space-y-2.5 text-[11px] shadow-inner">
+                                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                  <span className="text-white/50 font-medium uppercase text-[9px] tracking-wider">Net Horizon Growth</span>
+                                  <span className="font-mono font-bold text-emerald-400">+{projection.netCo2Gain.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg CO₂e</span>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <span className="text-white/50">Avg. Annual Rate:</span>
+                                  <span className="font-mono text-white/90 font-semibold">~{projection.avgAnnualRate.toFixed(1)} kg/yr</span>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <span className="text-white/50">Vehicle Offset Equiv.:</span>
+                                  <span className="font-mono text-white/90 font-semibold">~{projection.carMilesEquivalent.toLocaleString(undefined, { maximumFractionDigits: 0 })} miles</span>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <span className="text-white/50">Mature Tree-Years:</span>
+                                  <span className="font-mono text-white/90 font-semibold">~{projection.matureTreeYearsEquiv.toFixed(1)} years</span>
+                                </div>
+
+                                <div className="pt-2 border-t border-white/10 text-[9px] text-white/40 leading-relaxed font-sans">
+                                  * Allometric carbon storage compounds exponentially with diameter: M = a &middot; DBH<sup>b</sup>.
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </motion.div>
                   );
