@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { 
   Download, 
@@ -176,6 +176,7 @@ export default function EcoArborApp() {
   const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
   const [inspectingMetric, setInspectingMetric] = useState<'carbon' | 'air' | 'hydrology' | null>(null);
   const [chartMetric, setChartMetric] = useState<'carbon' | 'pm25' | 'stormwater'>('carbon');
+  const [trajectoryChartMetric, setTrajectoryChartMetric] = useState<'co2e' | 'netGain'>('co2e');
 
   // Seasonal State Toggle
   const [seasonalMode, setSeasonalMode] = useState<'summer' | 'winter'>('summer');
@@ -617,6 +618,44 @@ export default function EcoArborApp() {
       { year: 50, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 50, canopyDiameter + canopyGrowthPerYear * 50, 50) },
     ];
   }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, metrics.co2e]);
+
+  // 50-Year Growth & Sequestration Trajectory Curve Data (for recharts Line/Area Chart)
+  const growthTrajectoryData = useMemo(() => {
+    let dbhGrowthPerYear = 0.8; 
+    if (activeSpecies.family.includes('Moraceae') || activeSpecies.name.includes('Fig')) {
+      dbhGrowthPerYear = 1.2; 
+    } else if (activeSpecies.name.includes('Cedar') || activeSpecies.name.includes('Pine')) {
+      dbhGrowthPerYear = 0.6; 
+    } else if (activeSpecies.name.includes('Teak') || activeSpecies.name.includes('Oak')) {
+      dbhGrowthPerYear = 0.95; 
+    }
+    const canopyGrowthPerYear = dbhGrowthPerYear * 0.2; 
+
+    const years = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+    return years.map(y => {
+      const projDbh = dbh + dbhGrowthPerYear * y;
+      const projCanopy = canopyDiameter + canopyGrowthPerYear * y;
+      let M = 0;
+      if (activeSpecies.equationType === 'power') {
+        M = activeSpecies.a * Math.pow(projDbh, activeSpecies.b);
+      } else {
+        M = Math.exp(activeSpecies.a + activeSpecies.b * Math.log(projDbh));
+      }
+      const carbonContent = M * 0.50;
+      const totalCo2e = Number((carbonContent * (44.01 / 12.011)).toFixed(1));
+      const netGain = Number(Math.max(0, totalCo2e - metrics.co2e).toFixed(1));
+
+      return {
+        year: y,
+        yearLabel: y === 0 ? 'Present (0 Yr)' : `+${y} Yrs`,
+        co2e: totalCo2e,
+        netGain: netGain,
+        dbh: Number(projDbh.toFixed(1)),
+        canopy: Number(projCanopy.toFixed(1)),
+        isMilestone: y === 0 || y === 10 || y === 20 || y === 50
+      };
+    });
+  }, [activeSpecies, dbh, canopyDiameter, metrics.co2e]);
 
   // Totals for logged items (Arbor Stand Synthesis)
   const standTotals = useMemo(() => {
@@ -2240,6 +2279,134 @@ export default function EcoArborApp() {
                     </motion.div>
                   );
                 })}
+              </div>
+
+              {/* Recharts LineChart Visualizer for Cumulative Sequestration Trajectory */}
+              <div className="mt-8 pt-6 border-t border-white/10">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-5">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      50-Year Cumulative Carbon Sequestration Trajectory
+                    </h3>
+                    <p className="text-xs text-white/50 mt-0.5">
+                      Interactive allometric growth curve plotting projected carbon mass across 10, 20, and 50-year horizons
+                    </p>
+                  </div>
+
+                  {/* Metric Switcher */}
+                  <div className="flex items-center gap-2 bg-white/[0.04] p-1 rounded-xl border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setTrajectoryChartMetric('co2e')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                        trajectoryChartMetric === 'co2e'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
+                          : 'text-white/50 hover:text-white'
+                      }`}
+                    >
+                      Total CO₂e Stored
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTrajectoryChartMetric('netGain')}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                        trajectoryChartMetric === 'netGain'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
+                          : 'text-white/50 hover:text-white'
+                      }`}
+                    >
+                      Net Gain (+kg)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chart Box */}
+                <div className="bg-slate-950/70 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-inner">
+                  <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={growthTrajectoryData} margin={{ top: 20, right: 25, left: 10, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="carbonGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                        <XAxis 
+                          dataKey="yearLabel" 
+                          stroke="#94a3b8" 
+                          fontSize={11} 
+                          tickLine={false} 
+                          axisLine={{ stroke: '#475569' }} 
+                        />
+                        <YAxis 
+                          stroke="#94a3b8" 
+                          fontSize={11} 
+                          tickLine={false} 
+                          axisLine={{ stroke: '#475569' }}
+                          tickFormatter={(val) => `${val.toLocaleString()} kg`}
+                        />
+                        <Tooltip 
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-slate-900/95 backdrop-blur-xl border border-emerald-500/30 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 max-w-[240px]">
+                                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                                    <span className="font-mono font-bold text-emerald-400">{data.yearLabel}</span>
+                                    <span className="text-[10px] text-white/40 font-mono">Year {new Date().getFullYear() + data.year}</span>
+                                  </div>
+                                  <div className="space-y-1 font-mono text-[11px]">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-white/60">Total CO₂e Stored:</span>
+                                      <span className="font-bold text-white">{data.co2e.toLocaleString()} kg</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-white/60">Net Sequestration:</span>
+                                      <span className="font-bold text-emerald-400">+{data.netGain.toLocaleString()} kg</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-1 border-t border-white/10 text-[10px]">
+                                      <span className="text-white/40">DBH / Canopy:</span>
+                                      <span className="text-sky-300">{data.dbh} cm / {data.canopy} m</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey={trajectoryChartMetric} 
+                          stroke="#10b981" 
+                          strokeWidth={2.5} 
+                          fillOpacity={1} 
+                          fill="url(#carbonGradient)" 
+                          activeDot={{ r: 7, stroke: '#10b981', strokeWidth: 2, fill: '#022c22' }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Milestone Ribbon */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/10 text-center">
+                    {growthTrajectoryData.filter(d => d.isMilestone).map((m) => (
+                      <div key={m.year} className="bg-white/[0.02] border border-white/10 rounded-xl p-2.5 backdrop-blur-sm">
+                        <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-400 block mb-0.5">
+                          {m.year === 0 ? 'Baseline (Present)' : `${m.year} Year Horizon`}
+                        </span>
+                        <span className="text-sm font-bold font-mono text-white block">
+                          {trajectoryChartMetric === 'co2e' ? `${m.co2e.toLocaleString()} kg` : `+${m.netGain.toLocaleString()} kg`}
+                        </span>
+                        <span className="text-[10px] text-white/40 font-mono">
+                          {m.dbh} cm DBH &middot; {m.canopy} m Canopy
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
