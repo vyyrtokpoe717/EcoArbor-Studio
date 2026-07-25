@@ -1397,20 +1397,28 @@ export default function EcoArborApp() {
             
             {/* Real-time Dynamic CAD/GIS Sandbox */}
             <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 p-6 overflow-hidden relative">
-              <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/[0.02] backdrop-blur border border-white/10 px-2.5 py-1 rounded-md text-[10px] font-mono text-white/60">
-                <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                Live Canopy CAD Simulator
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+                <div>
+                  <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Interactive Morphology Preview
+                  </h2>
+                  <p className="text-[11px] text-white/50 mt-0.5">Real-time vector render of active botanical canopy and trunk growth</p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-emerald-500/10 backdrop-blur border border-emerald-500/20 px-3 py-1 rounded-lg text-[10px] font-mono text-emerald-300 shadow-sm">
+                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                  Live CAD Canopy Engine
+                </div>
               </div>
-              
-              <h2 className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">
-                Interactive Morphology Preview
-              </h2>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 
-                {/* SVG Live Vector Render */}
-                <div className="lg:col-span-7 bg-slate-950/40 backdrop-blur-sm rounded-xl p-4 border border-white/10 aspect-[16/10] relative flex items-center justify-center overflow-hidden">
+                {/* SVG Live Vector Render Box */}
+                <div className="lg:col-span-7 bg-gradient-to-b from-slate-900/80 via-slate-950/80 to-slate-950 rounded-2xl p-4 border border-white/10 aspect-[16/10] relative flex items-center justify-center overflow-hidden shadow-inner group">
                   
+                  {/* Subtle Background Grid Lines for CAD aesthetic */}
+                  <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-25" />
+
                   {/* Rain background effect based on stormwater storage */}
                   <div className="absolute inset-0 pointer-events-none opacity-20">
                     <svg className="w-full h-full">
@@ -1445,131 +1453,269 @@ export default function EcoArborApp() {
                     })}
                   </div>
 
-                  {/* Interactive Tree Render */}
-                  <svg viewBox="0 0 400 250" className="w-full h-full max-h-[220px]">
-                    <defs>
-                      <linearGradient id="trunkGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#2e1f18" />
-                        <stop offset="50%" stopColor="#4a3525" />
-                        <stop offset="100%" stopColor="#2e1f18" />
-                      </linearGradient>
-                      <radialGradient id="canopyGrad" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor={
-                          (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') 
-                            ? '#7c5a45' 
-                            : activeSpecies.foliageColor
-                        } />
-                        <stop offset="75%" stopColor={
-                          (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') 
-                            ? '#5a4132' 
-                            : activeSpecies.foliageColor
-                        } />
-                        <stop offset="100%" stopColor={
-                          (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') 
-                            ? '#3d2b21' 
-                            : '#082f1b'
-                        } />
-                      </radialGradient>
-                    </defs>
+                  {/* Interactive Tree Render - Proportionally Bounded */}
+                  {(() => {
+                    // Safe geometry bounds calculation
+                    const crownRadiusX = Math.min(140, Math.max(30, canopyDiameter * 5.2));
+                    const crownRadiusY = Math.min(75, Math.max(25, canopyDiameter * 3.6));
+                    const crownCenterY = 120;
+                    const groundY = 210;
+                    const trunkWidth = Math.min(26, Math.max(6, dbh * 0.18));
+                    const trunkTopY = Math.min(145, crownCenterY + crownRadiusY * 0.35);
 
-                    {/* Ground line */}
-                    <line x1="20" y1="210" x2="380" y2="210" stroke="#334155" strokeWidth="2" strokeDasharray="4 4" />
-                    
-                    {/* Trunk rendering scaled with DBH */}
-                    <rect 
-                       x={200 - (dbh * 0.12)} 
-                       y={210 - 75} 
-                       width={Math.max(4, dbh * 0.24)} 
-                       height="75" 
-                       fill="url(#trunkGrad)"
-                       rx="2"
-                    />
+                    return (
+                      <svg viewBox="0 0 400 250" className="w-full h-full max-h-[225px] relative z-10">
+                        <defs>
+                          <linearGradient id="trunkGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#2a1b14" />
+                            <stop offset="35%" stopColor="#4a3325" />
+                            <stop offset="70%" stopColor="#5c4130" />
+                            <stop offset="100%" stopColor="#21150f" />
+                          </linearGradient>
 
-                    {/* Branch arms for wider canopy diameters */}
-                    {canopyDiameter > 10 && (
-                      <>
-                        <path d={`M 200,165 Q ${200 - canopyDiameter * 4},160 ${200 - canopyDiameter * 6},150`} stroke="#3d2a1f" strokeWidth={Math.max(2, dbh * 0.08)} fill="none" />
-                        <path d={`M 200,165 Q ${200 + canopyDiameter * 4},160 ${200 + canopyDiameter * 6},150`} stroke="#3d2a1f" strokeWidth={Math.max(2, dbh * 0.08)} fill="none" />
-                      </>
-                    )}
+                          <radialGradient id="canopyMainGrad" cx="40%" cy="35%" r="65%">
+                            <stop offset="0%" stopColor={
+                              seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf'
+                                ? '#8a654e'
+                                : activeSpecies.foliageColor
+                            } />
+                            <stop offset="70%" stopColor={
+                              seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf'
+                                ? '#5a4132'
+                                : '#10522c'
+                            } />
+                            <stop offset="100%" stopColor={
+                              seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf'
+                                ? '#3b281d'
+                                : '#072b17'
+                            } />
+                          </radialGradient>
 
-                    {/* Foliage rendering based on active species */}
-                    {activeSpecies.type === 'Conifer' ? (
-                      // Conical coniferous geometry
-                      <polygon 
-                        points={`
-                          200,${155 - (canopyDiameter * 4)} 
-                          ${200 - (canopyDiameter * 6.5)},175 
-                          ${200 + (canopyDiameter * 6.5)},175
-                        `}
-                        fill="url(#canopyGrad)"
-                        opacity="0.9"
-                        stroke="#0f3d23"
-                        strokeWidth="1.5"
-                      />
-                    ) : (
-                      // Broadleaf rounded canopy - in winter, it becomes bare branch outlines and sparse dry leaves
-                      <>
-                        {seasonalMode === 'winter' && (
-                          <>
-                            {/* Bare branch lines inside winter canopy */}
-                            <path d={`M 200,165 Q ${200 - canopyDiameter * 3},150 ${200 - canopyDiameter * 4.5},125`} stroke="#4a3525" strokeWidth="2" fill="none" />
-                            <path d={`M 200,165 Q ${200 + canopyDiameter * 3},150 ${200 + canopyDiameter * 4.5},125`} stroke="#4a3525" strokeWidth="2" fill="none" />
-                            <path d={`M 200,145 Q ${200 - canopyDiameter * 1.5},125 ${200 - canopyDiameter * 2.5},105`} stroke="#4a3525" strokeWidth="1.8" fill="none" />
-                            <path d={`M 200,145 Q ${200 + canopyDiameter * 1.5},125 ${200 + canopyDiameter * 2.5},105`} stroke="#4a3525" strokeWidth="1.8" fill="none" />
-                            <path d={`M 200,125 Q 200,105 200,90`} stroke="#4a3525" strokeWidth="1.5" fill="none" />
-                          </>
-                        )}
+                          <radialGradient id="canopyHighlightGrad" cx="30%" cy="30%" r="50%">
+                            <stop offset="0%" stopColor="#34d399" stopOpacity="0.4" />
+                            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                          </radialGradient>
+
+                          <radialGradient id="groundShadow" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="#000000" stopOpacity="0.6" />
+                            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+                          </radialGradient>
+                        </defs>
+
+                        {/* Ground Shadow */}
                         <ellipse 
                           cx="200" 
-                          cy="130" 
-                          rx={canopyDiameter * 6.5} 
-                          ry={Math.max(30, canopyDiameter * 4.5)} 
-                          fill="url(#canopyGrad)" 
-                          opacity={seasonalMode === 'winter' ? '0.18' : '0.9'}
-                          stroke={seasonalMode === 'winter' ? '#5a4132' : '#0f3d23'}
-                          strokeWidth="1.5"
+                          cy={groundY + 2} 
+                          rx={Math.max(40, crownRadiusX * 0.9)} 
+                          ry="8" 
+                          fill="url(#groundShadow)" 
                         />
-                      </>
-                    )}
 
-                    {/* Additional botanical detail patterns to match canopy density (LAI) */}
-                    {[...Array(Math.max(1, Math.min(12, Math.floor(metrics.activeLai * 1.5))))].map((_, index) => {
-                      const spreadX = (canopyDiameter * 4.5);
-                      const rx = 200 + (Math.sin(index * 2.3) * spreadX * 0.8);
-                      const ry = activeSpecies.type === 'Conifer' 
-                        ? 140 + (index * 2.5) 
-                        : 130 + (Math.cos(index * 1.7) * (canopyDiameter * 3) * 0.6);
-                      
-                      return (
-                        <circle 
-                          key={index} 
-                          cx={rx} 
-                          cy={ry} 
-                          r={activeSpecies.type === 'Conifer' ? 6 : 9} 
-                          fill={seasonalMode === 'winter' ? '#7c5a45' : '#10b981'} 
-                          opacity={seasonalMode === 'winter' ? '0.2' : '0.3'} 
+                        {/* Ground line */}
+                        <line x1="20" y1={groundY} x2="380" y2={groundY} stroke="#475569" strokeWidth="1.5" strokeDasharray="4 4" />
+
+                        {/* Flared Trunk rendering scaled with DBH */}
+                        <path 
+                          d={`
+                            M ${200 - trunkWidth / 2},${trunkTopY} 
+                            L ${200 - trunkWidth / 2 - 2},${groundY - 8} 
+                            Q ${200 - trunkWidth / 2 - 6},${groundY} ${200 - trunkWidth / 2 - 10},${groundY}
+                            L ${200 + trunkWidth / 2 + 10},${groundY}
+                            Q ${200 + trunkWidth / 2 + 6},${groundY} ${200 + trunkWidth / 2 + 2},${groundY - 8}
+                            L ${200 + trunkWidth / 2},${trunkTopY}
+                            Z
+                          `}
+                          fill="url(#trunkGrad)"
+                          stroke="#1a110c"
+                          strokeWidth="0.8"
                         />
-                      );
-                    })}
 
-                    {/* Dimensions arrows and annotation layers */}
-                    {/* DBH marker */}
-                    <line x1={190 - (dbh * 0.12)} y1="225" x2={210 + (dbh * 0.12)} y2="225" stroke="#10b981" strokeWidth="1" />
-                    <circle cx={190 - (dbh * 0.12)} cy="225" r="2" fill="#10b981" />
-                    <circle cx={210 + (dbh * 0.12)} cy="225" r="2" fill="#10b981" />
-                    <text x="200" y="237" fill="#10b981" fontSize="9" textAnchor="middle" fontFamily="monospace">
-                      DBH: {dbh.toFixed(1)}cm
-                    </text>
+                        {/* Internal Branch Structure - Bounded Strictly Inside Crown Envelope */}
+                        {activeSpecies.type === 'Conifer' ? (
+                          <>
+                            {/* Conifer Central Leader Trunk & Branch Tiers */}
+                            <line x1="200" y1={groundY} x2="200" y2={crownCenterY - crownRadiusY * 0.8} stroke="#3b271b" strokeWidth={Math.max(2, trunkWidth * 0.6)} />
+                            {[0.3, 0.5, 0.7].map((tierRatio, idx) => {
+                              const tierY = crownCenterY + crownRadiusY * (0.5 - tierRatio);
+                              const tierWidth = crownRadiusX * (1 - tierRatio * 0.6) * 0.75;
+                              return (
+                                <g key={idx}>
+                                  <path d={`M 200,${tierY} L ${200 - tierWidth},${tierY + 8}`} stroke="#3b271b" strokeWidth={Math.max(1.2, trunkWidth * 0.35)} strokeLinecap="round" />
+                                  <path d={`M 200,${tierY} L ${200 + tierWidth},${tierY + 8}`} stroke="#3b271b" strokeWidth={Math.max(1.2, trunkWidth * 0.35)} strokeLinecap="round" />
+                                </g>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <>
+                            {/* Broadleaf Curved Main Limbs */}
+                            <path 
+                              d={`M 200,${trunkTopY} Q ${200 - crownRadiusX * 0.35},${crownCenterY + crownRadiusY * 0.1} ${200 - crownRadiusX * 0.55},${crownCenterY - crownRadiusY * 0.1}`} 
+                              stroke="#3b271b" 
+                              strokeWidth={Math.max(1.5, trunkWidth * 0.45)} 
+                              fill="none" 
+                              strokeLinecap="round"
+                            />
+                            <path 
+                              d={`M 200,${trunkTopY} Q ${200 + crownRadiusX * 0.35},${crownCenterY + crownRadiusY * 0.1} ${200 + crownRadiusX * 0.55},${crownCenterY - crownRadiusY * 0.1}`} 
+                              stroke="#3b271b" 
+                              strokeWidth={Math.max(1.5, trunkWidth * 0.45)} 
+                              fill="none" 
+                              strokeLinecap="round"
+                            />
+                            <path 
+                              d={`M 200,${trunkTopY} Q ${200 - crownRadiusX * 0.15},${crownCenterY - crownRadiusY * 0.2} ${200 - crownRadiusX * 0.25},${crownCenterY - crownRadiusY * 0.5}`} 
+                              stroke="#3b271b" 
+                              strokeWidth={Math.max(1.2, trunkWidth * 0.35)} 
+                              fill="none" 
+                              strokeLinecap="round"
+                            />
+                            <path 
+                              d={`M 200,${trunkTopY} Q ${200 + crownRadiusX * 0.15},${crownCenterY - crownRadiusY * 0.2} ${200 + crownRadiusX * 0.25},${crownCenterY - crownRadiusY * 0.5}`} 
+                              stroke="#3b271b" 
+                              strokeWidth={Math.max(1.2, trunkWidth * 0.35)} 
+                              fill="none" 
+                              strokeLinecap="round"
+                            />
+                          </>
+                        )}
 
-                    {/* Canopy Diameter marker */}
-                    <line x1={200 - (canopyDiameter * 6.5)} y1="75" x2={200 + (canopyDiameter * 6.5)} y2="75" stroke="#3b82f6" strokeWidth="1" />
-                    <circle cx={200 - (canopyDiameter * 6.5)} cy="75" r="2" fill="#3b82f6" />
-                    <circle cx={200 + (canopyDiameter * 6.5)} cy="75" r="2" fill="#3b82f6" />
-                    <text x="200" y="65" fill="#3b82f6" fontSize="9" textAnchor="middle" fontFamily="monospace">
-                      Canopy: {canopyDiameter.toFixed(1)}m
-                    </text>
-                  </svg>
+                        {/* Crown Foliage Render */}
+                        {activeSpecies.type === 'Conifer' ? (
+                          // Organic Multi-Tiered Evergreen Conifer Crown
+                          <g opacity={seasonalMode === 'winter' ? '0.9' : '0.96'}>
+                            {[
+                              { apexR: -1.25, baseR: -0.45, wR: 0.38 },
+                              { apexR: -0.85, baseR: -0.1,  wR: 0.58 },
+                              { apexR: -0.45, baseR: 0.25,  wR: 0.76 },
+                              { apexR: -0.1,  baseR: 0.55,  wR: 0.90 },
+                              { apexR: 0.2,   baseR: 0.85,  wR: 1.05 },
+                            ].map((tier, idx) => {
+                              const apexY = crownCenterY + crownRadiusY * tier.apexR;
+                              const baseY = crownCenterY + crownRadiusY * tier.baseR;
+                              const w = crownRadiusX * tier.wR;
+                              const h = baseY - apexY;
+
+                              return (
+                                <g key={idx}>
+                                  {/* Main Bough Shadow / Base */}
+                                  <path
+                                    d={`
+                                      M 200,${apexY}
+                                      Q ${200 - w * 0.45},${apexY + h * 0.35} ${200 - w},${baseY}
+                                      C ${200 - w * 0.65},${baseY + 5} ${200 - w * 0.35},${baseY - 4} 200,${baseY + 2}
+                                      C ${200 + w * 0.35},${baseY - 4} ${200 + w * 0.65},${baseY + 5} ${200 + w},${baseY}
+                                      Q ${200 + w * 0.45},${apexY + h * 0.35} 200,${apexY}
+                                      Z
+                                    `}
+                                    fill="url(#canopyMainGrad)"
+                                    stroke={seasonalMode === 'winter' ? '#4a3525' : '#0a3a20'}
+                                    strokeWidth="1.2"
+                                    strokeLinejoin="round"
+                                  />
+
+                                  {/* Soft Sunlight Highlight on Left Bough Curve */}
+                                  {seasonalMode !== 'winter' && (
+                                    <path
+                                      d={`
+                                        M 200,${apexY + h * 0.1}
+                                        Q ${200 - w * 0.35},${apexY + h * 0.4} ${200 - w * 0.75},${baseY - 3}
+                                        C ${200 - w * 0.5},${baseY - 1} ${200 - w * 0.2},${baseY - 5} 200,${baseY - 2}
+                                        Z
+                                      `}
+                                      fill="url(#canopyHighlightGrad)"
+                                      opacity="0.6"
+                                    />
+                                  )}
+
+                                  {/* Winter Snow Frosting Cap on Top Edge of Bough Tier */}
+                                  {seasonalMode === 'winter' && (
+                                    <path
+                                      d={`
+                                        M 200,${apexY - 1}
+                                        Q ${200 - w * 0.45},${apexY + h * 0.35} ${200 - w * 0.85},${baseY - 4}
+                                        Q ${200 - w * 0.45},${apexY + h * 0.45} 200,${apexY + 4}
+                                        Q ${200 + w * 0.45},${apexY + h * 0.45} ${200 + w * 0.85},${baseY - 4}
+                                        Q ${200 + w * 0.45},${apexY + h * 0.35} 200,${apexY - 1}
+                                        Z
+                                      `}
+                                      fill="#e2e8f0"
+                                      opacity="0.85"
+                                    />
+                                  )}
+                                </g>
+                              );
+                            })}
+                          </g>
+                        ) : (
+                          // Broadleaf Multi-Lobe Organic Canopy
+                          <g opacity={seasonalMode === 'winter' ? '0.22' : '0.92'}>
+                            {/* Main Background Mass */}
+                            <ellipse 
+                              cx="200" 
+                              cy={crownCenterY} 
+                              rx={crownRadiusX} 
+                              ry={crownRadiusY} 
+                              fill="url(#canopyMainGrad)" 
+                              stroke={seasonalMode === 'winter' ? '#5a4132' : '#08331d'}
+                              strokeWidth="1.2"
+                            />
+                            
+                            {/* Soft Organic Sub-Lobes for Realistic Texture */}
+                            {seasonalMode !== 'winter' && (
+                              <>
+                                <ellipse cx={200 - crownRadiusX * 0.4} cy={crownCenterY - crownRadiusY * 0.2} rx={crownRadiusX * 0.55} ry={crownRadiusY * 0.6} fill="url(#canopyMainGrad)" />
+                                <ellipse cx={200 + crownRadiusX * 0.4} cy={crownCenterY - crownRadiusY * 0.2} rx={crownRadiusX * 0.55} ry={crownRadiusY * 0.6} fill="url(#canopyMainGrad)" />
+                                <ellipse cx="200" cy={crownCenterY - crownRadiusY * 0.35} rx={crownRadiusX * 0.5} ry={crownRadiusY * 0.55} fill="url(#canopyHighlightGrad)" />
+                              </>
+                            )}
+                          </g>
+                        )}
+
+                        {/* Botanical Density Spots (LAI representation) */}
+                        {[...Array(Math.max(2, Math.min(10, Math.floor(metrics.activeLai * 1.4))))].map((_, index) => {
+                          const rx = 200 + Math.sin(index * 1.9) * (crownRadiusX * 0.65);
+                          const ry = crownCenterY + Math.cos(index * 2.3) * (crownRadiusY * 0.55);
+                          return (
+                            <circle 
+                              key={index} 
+                              cx={rx} 
+                              cy={ry} 
+                              r={activeSpecies.type === 'Conifer' ? 5 : 7} 
+                              fill={seasonalMode === 'winter' ? '#6b4c38' : '#34d399'} 
+                              opacity={seasonalMode === 'winter' ? '0.25' : '0.25'} 
+                            />
+                          );
+                        })}
+
+                        {/* Annotations Layer */}
+                        {/* DBH Marker Callout */}
+                        <g>
+                          <line x1={200 - trunkWidth / 2} y1={groundY + 14} x2={200 + trunkWidth / 2} y2={groundY + 14} stroke="#10b981" strokeWidth="1" />
+                          <line x1={200 - trunkWidth / 2} y1={groundY + 10} x2={200 - trunkWidth / 2} y2={groundY + 18} stroke="#10b981" strokeWidth="1" />
+                          <line x1={200 + trunkWidth / 2} y1={groundY + 10} x2={200 + trunkWidth / 2} y2={groundY + 18} stroke="#10b981" strokeWidth="1" />
+                          <text x="200" y={groundY + 28} fill="#10b981" fontSize="9" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
+                            DBH: {dbh.toFixed(1)} cm
+                          </text>
+                        </g>
+
+                        {/* Canopy Diameter Callout Marker */}
+                        <g>
+                          <line x1={200 - crownRadiusX} y1={crownCenterY - crownRadiusY - 10} x2={200 + crownRadiusX} y2={crownCenterY - crownRadiusY - 10} stroke="#38bdf8" strokeWidth="1" />
+                          <line x1={200 - crownRadiusX} y1={crownCenterY - crownRadiusY - 14} x2={200 - crownRadiusX} y2={crownCenterY - crownRadiusY - 6} stroke="#38bdf8" strokeWidth="1" />
+                          <line x1={200 + crownRadiusX} y1={crownCenterY - crownRadiusY - 14} x2={200 + crownRadiusX} y2={crownCenterY - crownRadiusY - 6} stroke="#38bdf8" strokeWidth="1" />
+                          
+                          {/* Vertical guide lines */}
+                          <line x1={200 - crownRadiusX} y1={crownCenterY - crownRadiusY - 6} x2={200 - crownRadiusX} y2={crownCenterY} stroke="#38bdf8" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.4" />
+                          <line x1={200 + crownRadiusX} y1={crownCenterY - crownRadiusY - 6} x2={200 + crownRadiusX} y2={crownCenterY} stroke="#38bdf8" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.4" />
+                          
+                          <text x="200" y={crownCenterY - crownRadiusY - 16} fill="#38bdf8" fontSize="9" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
+                            Canopy: {canopyDiameter.toFixed(1)} m
+                          </text>
+                        </g>
+                      </svg>
+                    );
+                  })()}
                 </div>
 
                 {/* Botanical Species dossier / facts */}
