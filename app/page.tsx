@@ -792,26 +792,127 @@ export default function EcoArborApp() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(70, 70, 70);
     
-    logs.forEach((log, idx) => {
-      const rowY = startY + 8 + (idx * 7.5);
+    if (logs.length > 0) {
+      logs.forEach((log, idx) => {
+        const rowY = startY + 8 + (idx * 7.5);
+        
+        // Zebra striping
+        if (idx % 2 === 1) {
+          doc.setFillColor(248, 250, 248);
+          doc.rect(15, rowY, 180, 7.5, 'F');
+        }
+        
+        doc.text(log.id, 17, rowY + 5);
+        
+        const fullName = `${log.speciesName} (${log.scientificName})`;
+        const displayName = fullName.length > 34 ? fullName.substring(0, 32) + '...' : fullName;
+        doc.text(displayName, 35, rowY + 5);
+        
+        doc.text(`${log.dbh.toFixed(0)}cm`, 105, rowY + 5);
+        doc.text(`${log.canopyDiameter.toFixed(1)}m`, 120, rowY + 5);
+        doc.text(`${log.co2e.toFixed(1)}kg`, 140, rowY + 5);
+        doc.text(`${log.pm25.toFixed(0)}mg`, 160, rowY + 5);
+        doc.text(`${log.stormwater.toFixed(1)}L`, 180, rowY + 5);
+      });
+    } else {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.setTextColor(130, 130, 130);
+      doc.text('No stand inventory assets logged in active session.', 17, startY + 12);
+    }
+
+    // BOTANICAL GROWTH & ECOLOGICAL PROJECTIONS SECTION (10, 20 & 50 Years)
+    let projSectionY = logs.length > 0 ? startY + 12 + (logs.length * 7.5) : startY + 22;
+
+    // Check if projection section needs a fresh page
+    if (projSectionY > 180) {
+      doc.addPage();
+      projSectionY = 25;
+    } else {
+      projSectionY += 6;
+    }
+
+    // Projection Section Header Block
+    doc.setFillColor(2, 48, 32);
+    doc.rect(15, projSectionY, 180, 1.5, 'F');
+    projSectionY += 7;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    doc.text('BOTANICAL GROWTH & ECOLOGICAL PROJECTIONS (10, 20 & 50 YEAR HORIZONS)', 15, projSectionY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(90, 90, 90);
+    doc.text(`Active Species Model: ${activeSpecies.name} (${activeSpecies.scientificName})`, 15, projSectionY + 5.5);
+    doc.text(`Baseline Dimensions: ${dbh.toFixed(1)} cm DBH  |  ${canopyDiameter.toFixed(1)} m Canopy  |  Current CO2e: ${metrics.co2e.toFixed(1)} kg`, 15, projSectionY + 10.5);
+
+    // Projection Table Header
+    let pTableY = projSectionY + 15;
+    doc.setFillColor(230, 242, 235);
+    doc.rect(15, pTableY, 180, 8, 'F');
+    doc.setDrawColor(200, 220, 205);
+    doc.rect(15, pTableY, 180, 8, 'S');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 80, 45);
+
+    doc.text('HORIZON', 17, pTableY + 5.5);
+    doc.text('PROJ. DIMENSIONS', 42, pTableY + 5.5);
+    doc.text('TOTAL CO2e', 82, pTableY + 5.5);
+    doc.text('NET GROWTH (RATE)', 112, pTableY + 5.5);
+    doc.text('AIR & STORMWATER', 152, pTableY + 5.5);
+
+    // Projection Table Rows
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+
+    growthProjections.forEach((proj, idx) => {
+      const rowY = pTableY + 8 + (idx * 16);
       
-      // Zebra striping
+      // Zebra striping & border
       if (idx % 2 === 1) {
-        doc.setFillColor(248, 250, 248);
-        doc.rect(15, rowY, 180, 7.5, 'F');
+        doc.setFillColor(248, 252, 249);
+        doc.rect(15, rowY, 180, 16, 'F');
+      } else {
+        doc.setFillColor(255, 255, 255);
+        doc.rect(15, rowY, 180, 16, 'F');
       }
+      doc.setDrawColor(230, 235, 230);
+      doc.rect(15, rowY, 180, 16, 'S');
+
+      // Primary Metric Line
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(2, 48, 32);
+      doc.text(`${proj.year} Years (${now.getFullYear() + proj.year})`, 17, rowY + 5.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(60, 60, 60);
+      doc.text(`${proj.dbh.toFixed(1)}cm DBH / ${proj.canopyDiameter.toFixed(1)}m`, 42, rowY + 5.5);
       
-      doc.text(log.id, 17, rowY + 5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${proj.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`, 82, rowY + 5.5);
       
-      const fullName = `${log.speciesName} (${log.scientificName})`;
-      const displayName = fullName.length > 34 ? fullName.substring(0, 32) + '...' : fullName;
-      doc.text(displayName, 35, rowY + 5);
-      
-      doc.text(`${log.dbh.toFixed(0)}cm`, 105, rowY + 5);
-      doc.text(`${log.canopyDiameter.toFixed(1)}m`, 120, rowY + 5);
-      doc.text(`${log.co2e.toFixed(1)}kg`, 140, rowY + 5);
-      doc.text(`${log.pm25.toFixed(0)}mg`, 160, rowY + 5);
-      doc.text(`${log.stormwater.toFixed(1)}L`, 180, rowY + 5);
+      doc.setTextColor(16, 120, 60);
+      doc.text(`+${proj.netCo2Gain.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg (~${proj.avgAnnualRate.toFixed(1)}/yr)`, 112, rowY + 5.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(`${proj.pm25.toFixed(0)}mg/h | ${proj.stormwater.toFixed(0)}L`, 152, rowY + 5.5);
+
+      // Secondary Line (Equivalencies & Impact)
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 100, 100);
+      doc.text(
+        `Equivalencies: ~${proj.carMilesEquivalent.toLocaleString(undefined, { maximumFractionDigits: 0 })} vehicle miles offset  |  ~${proj.matureTreeYearsEquiv.toFixed(1)} mature tree-years equivalent`,
+        17,
+        rowY + 12
+      );
     });
     
     // Page footer
