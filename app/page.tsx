@@ -788,7 +788,7 @@ export default function EcoArborApp() {
     // VISUAL SUMMARY CHART: AGGREGATE STAND BENEFITS
     // ==========================================
     const chartBoxY = 60;
-    const chartBoxHeight = 76;
+    const chartBoxHeight = 82;
     
     // Background card container
     doc.setFillColor(245, 252, 247);
@@ -804,86 +804,141 @@ export default function EcoArborApp() {
     doc.text('AGGREGATE STAND ECOSYSTEM BENEFITS - VISUAL SUMMARY CHART', 20, chartBoxY + 5.5);
     
     // Benefit Metrics Visual Bars
-    let barStartY = chartBoxY + 14;
-    
     // Compute reference values for bar scaling
     const co2Val = standTotals.count > 0 ? standTotals.co2e : metrics.co2e;
     const pmVal = standTotals.count > 0 ? standTotals.pm25 : metrics.pm25Intercepted;
     const stormVal = standTotals.count > 0 ? standTotals.stormwater : metrics.stormwater;
 
-    const maxCo2 = Math.max(co2Val, 100);
-    const maxPm25 = Math.max(pmVal, 50);
-    const maxWater = Math.max(stormVal, 100);
+    // Define standard benchmark scale targets for meaningful relative comparison
+    // Reference benchmarks scale dynamically to accommodate growing stands while maintaining clear visual ratios
+    const targetCo2 = Math.max(500, Math.ceil((co2Val + 1) / 250) * 250);
+    const targetPm25 = Math.max(500, Math.ceil((pmVal + 1) / 250) * 250);
+    const targetWater = Math.max(500, Math.ceil((stormVal + 1) / 250) * 250);
+
+    const co2Pct = Math.min(100, (co2Val / targetCo2) * 100);
+    const pmPct = Math.min(100, (pmVal / targetPm25) * 100);
+    const stormPct = Math.min(100, (stormVal / targetWater) * 100);
+
+    const barTrackX = 112;
+    const barTrackW = 66;
+
+    // Scale Ticks Header Row above bars
+    let barStartY = chartBoxY + 13;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(80, 120, 95);
+    doc.text('METRIC & STAND OUTPUT', 20, barStartY);
+    doc.text('PERFORMANCE vs BENCHMARK TARGET (0% - 100%)', barTrackX, barStartY);
+
+    // Draw scale grid ticks (0%, 25%, 50%, 75%, 100%)
+    [0, 0.25, 0.5, 0.75, 1.0].forEach((ratio) => {
+      const tickX = barTrackX + ratio * barTrackW;
+      doc.setDrawColor(215, 235, 220);
+      doc.setLineDashPattern([1, 1.5], 0);
+      doc.line(tickX, barStartY + 2, tickX, barStartY + 28);
+      doc.setLineDashPattern([], 0);
+    });
 
     // 1. Carbon Bar
-    const co2Pct = Math.min(100, Math.max(10, (co2Val / maxCo2) * 100));
+    barStartY += 5;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 70, 45);
-    doc.text('Carbon Stored (CO2e):', 20, barStartY + 4);
+    doc.text('Carbon Stored (CO2e):', 20, barStartY + 3.5);
     
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    doc.text(`${co2Val.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`, 62, barStartY + 4);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`${co2Val.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`, 60, barStartY + 3.5);
     
     // Bar Track & Fill
     doc.setFillColor(225, 238, 228);
-    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, barTrackW, 4.5, 1.2, 1.2, 'F');
+    const co2FillW = Math.max(2, (barTrackW * co2Pct) / 100);
     doc.setFillColor(16, 185, 129); // Emerald
-    doc.roundedRect(102, barStartY, (86 * co2Pct) / 100, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, co2FillW, 4.5, 1.2, 1.2, 'F');
+
+    // Percentage & Target Label
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(16, 120, 60);
+    doc.text(`${co2Pct.toFixed(0)}%`, barTrackX + barTrackW + 3, barStartY + 3.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`(ref: ${targetCo2}kg target)`, 20, barStartY + 7);
 
     // 2. Air Quality Bar
-    barStartY += 10;
-    const pmPct = Math.min(100, Math.max(10, (pmVal / maxPm25) * 100));
+    barStartY += 9;
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
     doc.setTextColor(15, 100, 100);
-    doc.text('PM2.5 Intercepted:', 20, barStartY + 4);
+    doc.text('PM2.5 Intercepted:', 20, barStartY + 3.5);
     
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    doc.text(`${pmVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`, 62, barStartY + 4);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`${pmVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`, 60, barStartY + 3.5);
     
     doc.setFillColor(220, 238, 238);
-    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, barTrackW, 4.5, 1.2, 1.2, 'F');
+    const pmFillW = Math.max(2, (barTrackW * pmPct) / 100);
     doc.setFillColor(20, 184, 166); // Teal
-    doc.roundedRect(102, barStartY, (86 * pmPct) / 100, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, pmFillW, 4.5, 1.2, 1.2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(15, 110, 110);
+    doc.text(`${pmPct.toFixed(0)}%`, barTrackX + barTrackW + 3, barStartY + 3.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`(ref: ${targetPm25}mg target)`, 20, barStartY + 7);
 
     // 3. Hydrology Bar
-    barStartY += 10;
-    const stormPct = Math.min(100, Math.max(10, (stormVal / maxWater) * 100));
+    barStartY += 9;
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
     doc.setTextColor(10, 80, 140);
-    doc.text('Stormwater Retained:', 20, barStartY + 4);
+    doc.text('Stormwater Retained:', 20, barStartY + 3.5);
     
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(60, 60, 60);
-    doc.text(`${stormVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`, 62, barStartY + 4);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`${stormVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`, 60, barStartY + 3.5);
     
     doc.setFillColor(220, 232, 245);
-    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, barTrackW, 4.5, 1.2, 1.2, 'F');
+    const stormFillW = Math.max(2, (barTrackW * stormPct) / 100);
     doc.setFillColor(2, 132, 199); // Sky
-    doc.roundedRect(102, barStartY, (86 * stormPct) / 100, 5, 1.5, 1.5, 'F');
+    doc.roundedRect(barTrackX, barStartY, stormFillW, 4.5, 1.2, 1.2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(2, 110, 170);
+    doc.text(`${stormPct.toFixed(0)}%`, barTrackX + barTrackW + 3, barStartY + 3.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`(ref: ${targetWater}L target)`, 20, barStartY + 7);
 
     // Divider line inside card
-    barStartY += 9;
+    barStartY += 8;
     doc.setDrawColor(210, 230, 215);
     doc.line(20, barStartY, 190, barStartY);
 
     // Section B: Stand Species Composition Distribution (Stacked Bar)
-    barStartY += 5;
+    barStartY += 4;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 70, 45);
     doc.text('STAND SPECIES BENEFIT DISTRIBUTION (CO2e SHARE):', 20, barStartY);
 
-    barStartY += 4;
+    barStartY += 3.5;
     // Stacked Bar
     const stackedBarX = 20;
     const stackedBarW = 170;
-    const stackedBarH = 6;
+    const stackedBarH = 5.5;
 
     doc.setFillColor(230, 238, 232);
-    doc.roundedRect(stackedBarX, barStartY, stackedBarW, stackedBarH, 2, 2, 'F');
+    doc.roundedRect(stackedBarX, barStartY, stackedBarW, stackedBarH, 1.5, 1.5, 'F');
 
     // Species map computation
     const speciesMap: { [name: string]: { co2e: number; count: number } } = {};
@@ -919,7 +974,7 @@ export default function EcoArborApp() {
       
       doc.setFillColor(color[0], color[1], color[2]);
       if (idx === 0 && speciesEntries.length === 1) {
-        doc.roundedRect(currentSegmentX, barStartY, segWidth, stackedBarH, 2, 2, 'F');
+        doc.roundedRect(currentSegmentX, barStartY, segWidth, stackedBarH, 1.5, 1.5, 'F');
       } else {
         doc.rect(currentSegmentX, barStartY, segWidth, stackedBarH, 'F');
       }
@@ -927,22 +982,22 @@ export default function EcoArborApp() {
     });
 
     // Species Legend Below Stacked Bar
-    barStartY += 10;
+    barStartY += 8.5;
     let legendX = 20;
-    speciesEntries.slice(0, 4).forEach(([spName, spData], idx) => {
+    speciesEntries.slice(0, 5).forEach(([spName, spData], idx) => {
       const pct = ((spData.co2e / totalCo2Sum) * 100).toFixed(0);
       const color = palette[idx % palette.length];
       
       doc.setFillColor(color[0], color[1], color[2]);
-      doc.rect(legendX, barStartY - 3, 3, 3, 'F');
+      doc.rect(legendX, barStartY - 2.8, 3, 3, 'F');
       
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(60, 60, 60);
       const legendText = `${spName} (${pct}%)`;
       doc.text(legendText, legendX + 4.5, barStartY);
       
-      legendX += doc.getTextWidth(legendText) + 12;
+      legendX += doc.getTextWidth(legendText) + 10;
     });
 
     // List of Logged Assets
@@ -1095,6 +1150,233 @@ export default function EcoArborApp() {
         rowY + 12
       );
     });
+
+    let currentPDFY = pTableY + 8 + (growthProjections.length * 16) + 6;
+
+    // ==========================================
+    // 50-YEAR CUMULATIVE CARBON SEQUESTRATION TRAJECTORY GRAPH
+    // ==========================================
+    const trajCardH = 68;
+    if (currentPDFY + trajCardH > 275) {
+      doc.addPage();
+      currentPDFY = 25;
+    }
+
+    const trajCardY = currentPDFY;
+    doc.setFillColor(245, 252, 247);
+    doc.setDrawColor(200, 228, 208);
+    doc.roundedRect(15, trajCardY, 180, trajCardH, 3, 3, 'FD');
+
+    // Header Bar
+    doc.setFillColor(2, 48, 32);
+    doc.rect(15, trajCardY, 180, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text('50-YEAR CUMULATIVE CARBON SEQUESTRATION TRAJECTORY (KG CO2e)', 20, trajCardY + 5.5);
+
+    // Subtitle
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(90, 115, 100);
+    doc.text('Modeled long-term biomass growth curve & cumulative CO2e storage (kg) milestone horizons.', 20, trajCardY + 13);
+
+    // Graph Plot Parameters
+    const plotX = 35;
+    const plotW = 150;
+    const plotY = trajCardY + 56; // bottom axis line
+    const plotH = 34; // height of plot area
+    const topY = plotY - plotH;
+
+    const maxTrajCo2 = Math.max(...growthTrajectoryData.map(d => d.co2e), 100);
+
+    // Draw Y-Axis Ticks & Horizontal Grid Lines
+    [0, 0.333, 0.666, 1.0].forEach((ratio) => {
+      const gy = plotY - ratio * plotH;
+      doc.setDrawColor(220, 235, 225);
+      doc.setLineDashPattern([1, 1.5], 0);
+      doc.line(plotX, gy, plotX + plotW, gy);
+      doc.setLineDashPattern([], 0);
+
+      const valLabel = `${Math.round(ratio * maxTrajCo2)}kg`;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 120, 110);
+      doc.text(valLabel, plotX - 2, gy + 1, { align: 'right' });
+    });
+
+    // Draw X-Axis Ticks & Vertical Grid Lines
+    const milestoneYears = [0, 10, 20, 30, 40, 50];
+    milestoneYears.forEach((yr) => {
+      const gx = plotX + (yr / 50) * plotW;
+      doc.setDrawColor(220, 235, 225);
+      doc.setLineDashPattern([1, 1.5], 0);
+      doc.line(gx, topY - 2, gx, plotY);
+      doc.setLineDashPattern([], 0);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(60, 80, 70);
+      doc.text(yr === 0 ? 'Yr 0 (Now)' : `Yr ${yr}`, gx, plotY + 4, { align: 'center' });
+    });
+
+    // Compute coordinate points
+    const points = growthTrajectoryData.map((d) => {
+      const px = plotX + (d.year / 50) * plotW;
+      const py = plotY - (d.co2e / maxTrajCo2) * plotH;
+      return { px, py, year: d.year, co2e: d.co2e };
+    });
+
+    // Render Area Shading under curve
+    if (points.length > 1) {
+      doc.setFillColor(215, 242, 222);
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        doc.triangle(p1.px, plotY, p1.px, p1.py, p2.px, plotY, 'F');
+        doc.triangle(p1.px, p1.py, p2.px, p2.py, p2.px, plotY, 'F');
+      }
+
+      // Emerald Stroke Line
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.8);
+      for (let i = 0; i < points.length - 1; i++) {
+        doc.line(points[i].px, points[i].py, points[i + 1].px, points[i + 1].py);
+      }
+      doc.setLineWidth(0.2); // reset line width
+
+      // Milestone Node Dots & Callouts
+      points.filter(p => p.year === 0 || p.year === 10 || p.year === 20 || p.year === 30 || p.year === 40 || p.year === 50).forEach((p) => {
+        doc.setFillColor(2, 48, 32);
+        doc.circle(p.px, p.py, 1.4, 'F');
+        doc.setFillColor(255, 255, 255);
+        doc.circle(p.px, p.py, 0.6, 'F');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(16, 120, 60);
+        const valText = p.co2e >= 1000 ? `${(p.co2e / 1000).toFixed(1)}t` : `${p.co2e.toFixed(0)}kg`;
+        doc.text(valText, p.px, p.py - 2.5, { align: 'center' });
+      });
+    }
+
+    currentPDFY += trajCardH + 8;
+
+    // ==========================================
+    // COMPARATIVE BENEFIT ANALYTICS BAR
+    // ==========================================
+    const compCardH = 64;
+    if (currentPDFY + compCardH > 275) {
+      doc.addPage();
+      currentPDFY = 25;
+    }
+
+    const compCardY = currentPDFY;
+    doc.setFillColor(245, 252, 247);
+    doc.setDrawColor(200, 228, 208);
+    doc.roundedRect(15, compCardY, 180, compCardH, 3, 3, 'FD');
+
+    // Header Bar
+    doc.setFillColor(2, 48, 32);
+    doc.rect(15, compCardY, 180, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text('COMPARATIVE BENEFIT ANALYTICS - IMPACT MULTIPLIERS & BENCHMARKS', 20, compCardY + 5.5);
+
+    // Subtitle & Legend
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text('Cross-Horizon & Regional Urban Benchmark Comparison', 20, compCardY + 13);
+
+    // Color Legend
+    doc.setFillColor(16, 185, 129); // Emerald: Stand Current
+    doc.rect(115, compCardY + 10.5, 3, 3, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(60, 60, 60);
+    doc.text('Current Stand Asset', 119, compCardY + 13);
+
+    doc.setFillColor(20, 184, 166); // Teal: 50-Yr Horizon
+    doc.rect(148, compCardY + 10.5, 3, 3, 'F');
+    doc.text('50-Yr Horizon', 152, compCardY + 13);
+
+    doc.setFillColor(100, 116, 139); // Slate: Urban Benchmark
+    doc.rect(173, compCardY + 10.5, 3, 3, 'F');
+    doc.text('Urban Avg', 177, compCardY + 13);
+
+    // Comparative Metrics Data
+    let compBarY = compCardY + 17;
+
+    const proj50 = growthProjections.find(p => p.year === 50);
+    const co2_current = standTotals.count > 0 ? standTotals.co2e : metrics.co2e;
+    const co2_50yr = proj50 ? (standTotals.count > 1 ? co2_current * (proj50.co2e / (metrics.co2e || 1)) : proj50.co2e) : co2_current * 7.5;
+
+    const maxCo2Comp = Math.max(co2_50yr, 10);
+    const barX = 75;
+    const barW = 85;
+
+    // Group 1: Carbon Storage Horizon
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(30, 70, 45);
+    doc.text('Carbon Storage Horizon:', 20, compBarY + 3);
+
+    doc.setFillColor(225, 238, 228); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(16, 185, 129); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (co2_current / maxCo2Comp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(16, 120, 60);
+    doc.text(`Current: ${co2_current.toFixed(0)} kg (1.0x)`, barX + barW + 2, compBarY + 2.8);
+
+    compBarY += 4.5;
+    doc.setFillColor(220, 238, 238); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(20, 184, 166); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (co2_50yr / maxCo2Comp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(15, 110, 110);
+    const mult = (co2_50yr / (co2_current || 1)).toFixed(1);
+    doc.text(`50-Yr: ${co2_50yr.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg (${mult}x)`, barX + barW + 2, compBarY + 2.8);
+
+    // Group 2: Air Quality (PM2.5) vs Urban Benchmark
+    compBarY += 7.5;
+    const pm_current = standTotals.count > 0 ? standTotals.pm25 : metrics.pm25Intercepted;
+    const pm_benchmark = 120 * Math.max(1, standTotals.count);
+    const maxPmComp = Math.max(pm_current, pm_benchmark, 10);
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(15, 100, 100);
+    doc.text('Air Quality (PM2.5):', 20, compBarY + 3);
+
+    doc.setFillColor(225, 238, 228); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(16, 185, 129); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (pm_current / maxPmComp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(16, 120, 60);
+    doc.text(`Stand: ${pm_current.toFixed(0)} mg/h`, barX + barW + 2, compBarY + 2.8);
+
+    compBarY += 4.5;
+    doc.setFillColor(235, 240, 245); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(100, 116, 139); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (pm_benchmark / maxPmComp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(100, 116, 139);
+    doc.text(`Urban Avg: ${pm_benchmark.toFixed(0)} mg/h`, barX + barW + 2, compBarY + 2.8);
+
+    // Group 3: Stormwater Retention vs Urban Benchmark
+    compBarY += 7.5;
+    const storm_current = standTotals.count > 0 ? standTotals.stormwater : metrics.stormwater;
+    const storm_benchmark = 650 * Math.max(1, standTotals.count);
+    const maxStormComp = Math.max(storm_current, storm_benchmark, 10);
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(10, 80, 140);
+    doc.text('Stormwater Retained:', 20, compBarY + 3);
+
+    doc.setFillColor(225, 238, 228); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(16, 185, 129); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (storm_current / maxStormComp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(16, 120, 60);
+    doc.text(`Stand: ${storm_current.toFixed(0)} L`, barX + barW + 2, compBarY + 2.8);
+
+    compBarY += 4.5;
+    doc.setFillColor(235, 240, 245); doc.roundedRect(barX, compBarY, barW, 3.5, 1, 1, 'F');
+    doc.setFillColor(100, 116, 139); doc.roundedRect(barX, compBarY, Math.max(2, (barW * (storm_benchmark / maxStormComp))), 3.5, 1, 1, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(100, 116, 139);
+    doc.text(`Urban Avg: ${storm_benchmark.toFixed(0)} L`, barX + barW + 2, compBarY + 2.8);
+
+    // Summary Footer inside Card
+    compBarY += 6.5;
+    doc.setDrawColor(210, 230, 215); doc.line(20, compBarY, 190, compBarY);
+    compBarY += 3.5;
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5); doc.setTextColor(80, 110, 90);
+    doc.text(`Analytical Summary: Active stand asset exhibits ~${((storm_current / (storm_benchmark || 1)) * 100).toFixed(0)}% hydrological efficiency compared to standard regional municipal canopy benchmarks.`, 20, compBarY);
     
     // Page footer
     const pageCount = doc.getNumberOfPages();
