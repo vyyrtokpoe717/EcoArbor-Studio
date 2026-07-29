@@ -769,25 +769,25 @@ export default function EcoArborApp() {
     doc.text('ECOARBOR STUDIO', 15, 16);
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.text('PRECISION ECOLOGICAL MODELING & IMPACT ASSESSMENT REPORT', 15, 23);
     doc.text(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, 15, 29);
     
     // Field Assessment Metadata
     doc.setTextColor(50, 50, 50);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(9.5);
     doc.text('FIELD ASSESSMENT METADATA', 15, 43);
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
     doc.text(`Ambient Air Quality (PM2.5): ${weatherData?.pm25.toFixed(1) || '42.0'} ug/m3  |  Ambient Wind Speed: ${weatherData?.windSpeed.toFixed(1) || '2.8'} m/s`, 15, 54);
 
     // ==========================================
     // VISUAL SUMMARY CHART: AGGREGATE STAND BENEFITS
     // ==========================================
-    const chartBoxY = 60;
+    const chartBoxY = 59;
     const chartBoxHeight = 76;
     
     // Background card container
@@ -799,7 +799,7 @@ export default function EcoArborApp() {
     doc.setFillColor(2, 48, 32);
     doc.rect(15, chartBoxY, 180, 8, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(255, 255, 255);
     doc.text('AGGREGATE STAND ECOSYSTEM BENEFITS - VISUAL SUMMARY CHART', 20, chartBoxY + 5.5);
     
@@ -877,7 +877,6 @@ export default function EcoArborApp() {
     doc.text('STAND SPECIES BENEFIT DISTRIBUTION (CO2e SHARE):', 20, barStartY);
 
     barStartY += 4;
-    // Stacked Bar
     const stackedBarX = 20;
     const stackedBarW = 170;
     const stackedBarH = 6;
@@ -885,7 +884,6 @@ export default function EcoArborApp() {
     doc.setFillColor(230, 238, 232);
     doc.roundedRect(stackedBarX, barStartY, stackedBarW, stackedBarH, 2, 2, 'F');
 
-    // Species map computation
     const speciesMap: { [name: string]: { co2e: number; count: number } } = {};
     const palette: [number, number, number][] = [
       [16, 185, 129],  // Emerald
@@ -942,34 +940,35 @@ export default function EcoArborApp() {
       const legendText = `${spName} (${pct}%)`;
       doc.text(legendText, legendX + 4.5, barStartY);
       
-      legendX += doc.getTextWidth(legendText) + 12;
+      legendX += doc.getTextWidth(legendText) + 10;
     });
 
     // List of Logged Assets
-    const inventoryTitleY = chartBoxY + chartBoxHeight + 12;
+    const inventoryTitleY = chartBoxY + chartBoxHeight + 11;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(50, 50, 50);
     doc.text('SURVEYED INVENTORY ASSETS', 15, inventoryTitleY);
     
-    // Draw table headers
-    let startY = inventoryTitleY + 6;
+    // Draw table headers with precise column spacing (Table total width = 180mm from X=15 to X=195)
+    let startY = inventoryTitleY + 5;
     doc.setFillColor(220, 230, 220);
     doc.rect(15, startY, 180, 8, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(40, 60, 40);
     
     doc.text('ID', 17, startY + 5.5);
-    doc.text('SPECIES (SCIENTIFIC NAME)', 35, startY + 5.5);
-    doc.text('DBH', 105, startY + 5.5);
-    doc.text('CANOPY', 120, startY + 5.5);
-    doc.text('CO2e', 140, startY + 5.5);
-    doc.text('PM2.5', 160, startY + 5.5);
-    doc.text('STORMWATER', 180, startY + 5.5);
+    doc.text('SPECIES (SCIENTIFIC NAME)', 31, startY + 5.5);
+    doc.text('DBH', 92, startY + 5.5);
+    doc.text('CANOPY', 107, startY + 5.5);
+    doc.text('CO2e', 125, startY + 5.5);
+    doc.text('PM2.5', 143, startY + 5.5);
+    doc.text('STORMWATER', 163, startY + 5.5);
     
     // Draw table rows
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
     doc.setTextColor(70, 70, 70);
     
     if (logs.length > 0) {
@@ -985,18 +984,18 @@ export default function EcoArborApp() {
         doc.text(log.id, 17, rowY + 5);
         
         const fullName = `${log.speciesName} (${log.scientificName})`;
-        const displayName = fullName.length > 34 ? fullName.substring(0, 32) + '...' : fullName;
-        doc.text(displayName, 35, rowY + 5);
+        const displayName = fullName.length > 30 ? fullName.substring(0, 28) + '...' : fullName;
+        doc.text(displayName, 31, rowY + 5);
         
-        doc.text(`${log.dbh.toFixed(0)}cm`, 105, rowY + 5);
-        doc.text(`${log.canopyDiameter.toFixed(1)}m`, 120, rowY + 5);
-        doc.text(`${log.co2e.toFixed(1)}kg`, 140, rowY + 5);
-        doc.text(`${log.pm25.toFixed(0)}mg`, 160, rowY + 5);
-        doc.text(`${log.stormwater.toFixed(1)}L`, 180, rowY + 5);
+        doc.text(`${log.dbh.toFixed(0)}cm`, 92, rowY + 5);
+        doc.text(`${log.canopyDiameter.toFixed(1)}m`, 107, rowY + 5);
+        doc.text(`${log.co2e.toFixed(1)}kg`, 125, rowY + 5);
+        doc.text(`${log.pm25.toFixed(0)}mg`, 143, rowY + 5);
+        doc.text(`${log.stormwater.toFixed(1)}L`, 163, rowY + 5);
       });
     } else {
       doc.setFont('helvetica', 'italic');
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setTextColor(130, 130, 130);
       doc.text('No stand inventory assets logged in active session.', 17, startY + 12);
     }
@@ -1018,25 +1017,25 @@ export default function EcoArborApp() {
     projSectionY += 7;
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(50, 50, 50);
     doc.text('BOTANICAL GROWTH & ECOLOGICAL PROJECTIONS (10, 20 & 50 YEAR HORIZONS)', 15, projSectionY);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(90, 90, 90);
-    doc.text(`Active Species Model: ${activeSpecies.name} (${activeSpecies.scientificName})`, 15, projSectionY + 5.5);
-    doc.text(`Baseline Dimensions: ${dbh.toFixed(1)} cm DBH  |  ${canopyDiameter.toFixed(1)} m Canopy  |  Current CO2e: ${metrics.co2e.toFixed(1)} kg`, 15, projSectionY + 10.5);
+    doc.text(`Active Species Model: ${activeSpecies.name} (${activeSpecies.scientificName})`, 15, projSectionY + 5);
+    doc.text(`Baseline Dimensions: ${dbh.toFixed(1)} cm DBH  |  ${canopyDiameter.toFixed(1)} m Canopy  |  Current CO2e: ${metrics.co2e.toFixed(1)} kg`, 15, projSectionY + 9.5);
 
     // Projection Table Header
-    let pTableY = projSectionY + 15;
+    let pTableY = projSectionY + 14;
     doc.setFillColor(230, 242, 235);
     doc.rect(15, pTableY, 180, 8, 'F');
     doc.setDrawColor(200, 220, 205);
     doc.rect(15, pTableY, 180, 8, 'S');
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(15, 80, 45);
 
     doc.text('HORIZON', 17, pTableY + 5.5);
@@ -1065,12 +1064,12 @@ export default function EcoArborApp() {
 
       // Primary Metric Line
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setTextColor(2, 48, 32);
       doc.text(`${proj.year} Years (${now.getFullYear() + proj.year})`, 17, rowY + 5.5);
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(60, 60, 60);
       doc.text(`${proj.dbh.toFixed(1)}cm DBH / ${proj.canopyDiameter.toFixed(1)}m`, 42, rowY + 5.5);
       
@@ -1086,7 +1085,7 @@ export default function EcoArborApp() {
 
       // Secondary Line (Equivalencies & Impact)
       doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
       doc.text(
         `Equivalencies: ~${proj.carMilesEquivalent.toLocaleString(undefined, { maximumFractionDigits: 0 })} vehicle miles offset  |  ~${proj.matureTreeYearsEquiv.toFixed(1)} mature tree-years equivalent`,
@@ -1663,14 +1662,14 @@ export default function EcoArborApp() {
                   <button
                     type="button"
                     onClick={handleLogTree}
-                    className={`w-full relative group overflow-hidden flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-medium text-sm transition-all duration-300 shadow-xl cursor-pointer active:scale-[0.98] ${
+                    className={`w-full relative group overflow-hidden flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-bold text-sm transition-all duration-300 shadow-xl cursor-pointer active:scale-[0.98] ${
                       addedSuccess
-                        ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 text-white shadow-emerald-500/30 border border-emerald-300/50'
-                        : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:via-teal-500 hover:to-emerald-600 text-white border border-emerald-400/30 hover:border-emerald-400/50 shadow-emerald-950/60 hover:shadow-emerald-500/25'
+                        ? 'bg-emerald-400 text-slate-950 shadow-emerald-400/30 border border-emerald-300'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border border-emerald-400/40 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30'
                     }`}
                   >
                     {/* Subtle shine sweep effect on hover */}
-                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
 
                     <AnimatePresence mode="wait">
                       {addedSuccess ? (
@@ -1680,9 +1679,9 @@ export default function EcoArborApp() {
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -6, scale: 0.95 }}
                           transition={{ duration: 0.2 }}
-                          className="flex items-center gap-2 font-semibold text-emerald-100"
+                          className="flex items-center gap-2 font-bold text-slate-950"
                         >
-                          <CheckCircle className="w-4 h-4 text-emerald-200" />
+                          <CheckCircle className="w-4.5 h-4.5 text-slate-950" />
                           <span>Added Successfully</span>
                         </motion.div>
                       ) : (
@@ -1692,7 +1691,7 @@ export default function EcoArborApp() {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 6 }}
                           transition={{ duration: 0.2 }}
-                          className="flex items-center gap-2 font-medium tracking-wide"
+                          className="flex items-center gap-2 font-bold tracking-wide text-slate-950"
                         >
                           <span>Log Tree Asset to Field Report</span>
                         </motion.div>
