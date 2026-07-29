@@ -175,6 +175,7 @@ export default function EcoArborApp() {
   // Field Log State
   const [logs, setLogs] = useState<LoggedTree[]>([]);
   const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+  const [addedSuccess, setAddedSuccess] = useState(false);
   const [inspectingMetric, setInspectingMetric] = useState<'carbon' | 'air' | 'hydrology' | null>(null);
   const [chartMetric, setChartMetric] = useState<'carbon' | 'pm25' | 'stormwater'>('carbon');
   const [trajectoryChartMetric, setTrajectoryChartMetric] = useState<'co2e' | 'netGain'>('co2e');
@@ -686,6 +687,12 @@ export default function EcoArborApp() {
     };
     setLogs(prev => [newLog, ...prev]);
     setSelectedLogIds(prev => [newLog.id, ...prev]);
+
+    // Show Added Successfully feedback
+    setAddedSuccess(true);
+    setTimeout(() => {
+      setAddedSuccess(false);
+    }, 2500);
   };
 
   const handleClearLogs = () => {
@@ -754,56 +761,199 @@ export default function EcoArborApp() {
     
     // Header Style
     doc.setFillColor(2, 48, 32); 
-    doc.rect(0, 0, 210, 40, 'F');
+    doc.rect(0, 0, 210, 36, 'F');
     
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text('ECOARBOR STUDIO', 15, 18);
+    doc.setFontSize(18);
+    doc.text('ECOARBOR STUDIO', 15, 16);
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text('PRECISION ECOLOGICAL MODELING & IMPACT ASSESSMENT REPORT', 15, 26);
-    doc.text(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, 15, 33);
+    doc.setFontSize(9);
+    doc.text('PRECISION ECOLOGICAL MODELING & IMPACT ASSESSMENT REPORT', 15, 23);
+    doc.text(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, 15, 29);
     
-    // Sub-header Info Block
+    // Field Assessment Metadata
     doc.setTextColor(50, 50, 50);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('FIELD ASSESSMENT METADATA', 15, 52);
+    doc.setFontSize(10);
+    doc.text('FIELD ASSESSMENT METADATA', 15, 43);
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'}`, 15, 58);
-    doc.text(`Coordinates: ${liveLocation ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'}`, 15, 64);
-    doc.text(`Ambient Air Quality (PM2.5): ${weatherData?.pm25.toFixed(1) || '42.0'} ug/m3  |  Ambient Wind Speed: ${weatherData?.windSpeed.toFixed(1) || '2.8'} m/s`, 15, 70);
+    doc.setFontSize(8.5);
+    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
+    doc.text(`Ambient Air Quality (PM2.5): ${weatherData?.pm25.toFixed(1) || '42.0'} ug/m3  |  Ambient Wind Speed: ${weatherData?.windSpeed.toFixed(1) || '2.8'} m/s`, 15, 54);
+
+    // ==========================================
+    // VISUAL SUMMARY CHART: AGGREGATE STAND BENEFITS
+    // ==========================================
+    const chartBoxY = 60;
+    const chartBoxHeight = 76;
     
-    // Stand Aggregate Summary Box
-    doc.setFillColor(240, 248, 240);
-    doc.rect(15, 76, 180, 26, 'F');
-    doc.setDrawColor(200, 225, 200);
-    doc.rect(15, 76, 180, 26, 'S');
+    // Background card container
+    doc.setFillColor(245, 252, 247);
+    doc.setDrawColor(200, 228, 208);
+    doc.roundedRect(15, chartBoxY, 180, chartBoxHeight, 3, 3, 'FD');
     
+    // Header bar inside card
+    doc.setFillColor(2, 48, 32);
+    doc.rect(15, chartBoxY, 180, 8, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.setTextColor(15, 80, 45);
-    doc.text('AGGREGATE ARBOR STAND CALCULATIONS', 20, 82);
+    doc.setTextColor(255, 255, 255);
+    doc.text('AGGREGATE STAND ECOSYSTEM BENEFITS - VISUAL SUMMARY CHART', 20, chartBoxY + 5.5);
+    
+    // Benefit Metrics Visual Bars
+    let barStartY = chartBoxY + 14;
+    
+    // Compute reference values for bar scaling
+    const co2Val = standTotals.count > 0 ? standTotals.co2e : metrics.co2e;
+    const pmVal = standTotals.count > 0 ? standTotals.pm25 : metrics.pm25Intercepted;
+    const stormVal = standTotals.count > 0 ? standTotals.stormwater : metrics.stormwater;
+
+    const maxCo2 = Math.max(co2Val, 100);
+    const maxPm25 = Math.max(pmVal, 50);
+    const maxWater = Math.max(stormVal, 100);
+
+    // 1. Carbon Bar
+    const co2Pct = Math.min(100, Math.max(10, (co2Val / maxCo2) * 100));
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 70, 45);
+    doc.text('Carbon Stored (CO2e):', 20, barStartY + 4);
     
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(60, 60, 60);
-    doc.text(`Total Trees Logged: ${standTotals.count}`, 20, 89);
-    doc.text(`Total CO2e Sequestered: ${standTotals.co2e.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`, 20, 95);
-    doc.text(`Total PM2.5 Captured: ${standTotals.pm25.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`, 110, 89);
-    doc.text(`Stormwater Retention: ${standTotals.stormwater.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`, 110, 95);
+    doc.text(`${co2Val.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`, 62, barStartY + 4);
+    
+    // Bar Track & Fill
+    doc.setFillColor(225, 238, 228);
+    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.setFillColor(16, 185, 129); // Emerald
+    doc.roundedRect(102, barStartY, (86 * co2Pct) / 100, 5, 1.5, 1.5, 'F');
+
+    // 2. Air Quality Bar
+    barStartY += 10;
+    const pmPct = Math.min(100, Math.max(10, (pmVal / maxPm25) * 100));
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 100, 100);
+    doc.text('PM2.5 Intercepted:', 20, barStartY + 4);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    doc.text(`${pmVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} mg/hr`, 62, barStartY + 4);
+    
+    doc.setFillColor(220, 238, 238);
+    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.setFillColor(20, 184, 166); // Teal
+    doc.roundedRect(102, barStartY, (86 * pmPct) / 100, 5, 1.5, 1.5, 'F');
+
+    // 3. Hydrology Bar
+    barStartY += 10;
+    const stormPct = Math.min(100, Math.max(10, (stormVal / maxWater) * 100));
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(10, 80, 140);
+    doc.text('Stormwater Retained:', 20, barStartY + 4);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60, 60, 60);
+    doc.text(`${stormVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} Liters`, 62, barStartY + 4);
+    
+    doc.setFillColor(220, 232, 245);
+    doc.roundedRect(102, barStartY, 86, 5, 1.5, 1.5, 'F');
+    doc.setFillColor(2, 132, 199); // Sky
+    doc.roundedRect(102, barStartY, (86 * stormPct) / 100, 5, 1.5, 1.5, 'F');
+
+    // Divider line inside card
+    barStartY += 9;
+    doc.setDrawColor(210, 230, 215);
+    doc.line(20, barStartY, 190, barStartY);
+
+    // Section B: Stand Species Composition Distribution (Stacked Bar)
+    barStartY += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 70, 45);
+    doc.text('STAND SPECIES BENEFIT DISTRIBUTION (CO2e SHARE):', 20, barStartY);
+
+    barStartY += 4;
+    // Stacked Bar
+    const stackedBarX = 20;
+    const stackedBarW = 170;
+    const stackedBarH = 6;
+
+    doc.setFillColor(230, 238, 232);
+    doc.roundedRect(stackedBarX, barStartY, stackedBarW, stackedBarH, 2, 2, 'F');
+
+    // Species map computation
+    const speciesMap: { [name: string]: { co2e: number; count: number } } = {};
+    const palette: [number, number, number][] = [
+      [16, 185, 129],  // Emerald
+      [2, 132, 199],   // Sky
+      [20, 184, 166],  // Teal
+      [139, 92, 246],  // Violet
+      [245, 158, 11],  // Amber
+      [225, 29, 72],   // Rose
+    ];
+
+    if (logs.length > 0) {
+      logs.forEach(log => {
+        if (!speciesMap[log.speciesName]) {
+          speciesMap[log.speciesName] = { co2e: 0, count: 0 };
+        }
+        speciesMap[log.speciesName].co2e += log.co2e;
+        speciesMap[log.speciesName].count += 1;
+      });
+    } else {
+      speciesMap[activeSpecies.name] = { co2e: metrics.co2e, count: 1 };
+    }
+
+    const speciesEntries = Object.entries(speciesMap);
+    const totalCo2Sum = Object.values(speciesMap).reduce((acc, curr) => acc + curr.co2e, 0) || 1;
+
+    let currentSegmentX = stackedBarX;
+    speciesEntries.forEach(([_, spData], idx) => {
+      const pct = (spData.co2e / totalCo2Sum);
+      const segWidth = Math.max(2, pct * stackedBarW);
+      const color = palette[idx % palette.length];
+      
+      doc.setFillColor(color[0], color[1], color[2]);
+      if (idx === 0 && speciesEntries.length === 1) {
+        doc.roundedRect(currentSegmentX, barStartY, segWidth, stackedBarH, 2, 2, 'F');
+      } else {
+        doc.rect(currentSegmentX, barStartY, segWidth, stackedBarH, 'F');
+      }
+      currentSegmentX += segWidth;
+    });
+
+    // Species Legend Below Stacked Bar
+    barStartY += 10;
+    let legendX = 20;
+    speciesEntries.slice(0, 4).forEach(([spName, spData], idx) => {
+      const pct = ((spData.co2e / totalCo2Sum) * 100).toFixed(0);
+      const color = palette[idx % palette.length];
+      
+      doc.setFillColor(color[0], color[1], color[2]);
+      doc.rect(legendX, barStartY - 3, 3, 3, 'F');
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(60, 60, 60);
+      const legendText = `${spName} (${pct}%)`;
+      doc.text(legendText, legendX + 4.5, barStartY);
+      
+      legendX += doc.getTextWidth(legendText) + 12;
+    });
 
     // List of Logged Assets
+    const inventoryTitleY = chartBoxY + chartBoxHeight + 12;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(50, 50, 50);
-    doc.text('SURVEYED INVENTORY ASSETS', 15, 114);
+    doc.text('SURVEYED INVENTORY ASSETS', 15, inventoryTitleY);
     
     // Draw table headers
-    let startY = 120;
+    let startY = inventoryTitleY + 6;
     doc.setFillColor(220, 230, 220);
     doc.rect(15, startY, 180, 8, 'F');
     doc.setFont('helvetica', 'bold');
@@ -1511,11 +1661,43 @@ export default function EcoArborApp() {
                 {/* Log Tree Asset Button inside Arboricultural Inputs */}
                 <div className="pt-5 border-t border-white/10">
                   <button
+                    type="button"
                     onClick={handleLogTree}
-                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-white/10 text-white font-semibold py-3.5 px-4 rounded-xl transition-all shadow-lg hover:shadow-emerald-900/30 active:scale-[0.98] cursor-pointer"
+                    className={`w-full relative group overflow-hidden flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-medium text-sm transition-all duration-300 shadow-xl cursor-pointer active:scale-[0.98] ${
+                      addedSuccess
+                        ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 text-white shadow-emerald-500/30 border border-emerald-300/50'
+                        : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:via-teal-500 hover:to-emerald-600 text-white border border-emerald-400/30 hover:border-emerald-400/50 shadow-emerald-950/60 hover:shadow-emerald-500/25'
+                    }`}
                   >
-                    <Plus className="w-4 h-4 shrink-0" />
-                    Log Tree Asset to Field Report
+                    {/* Subtle shine sweep effect on hover */}
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+                    <AnimatePresence mode="wait">
+                      {addedSuccess ? (
+                        <motion.div
+                          key="success"
+                          initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex items-center gap-2 font-semibold text-emerald-100"
+                        >
+                          <CheckCircle className="w-4 h-4 text-emerald-200" />
+                          <span>Added Successfully</span>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="normal"
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 6 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex items-center gap-2 font-medium tracking-wide"
+                        >
+                          <span>Log Tree Asset to Field Report</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </button>
                 </div>
 
