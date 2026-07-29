@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
@@ -518,23 +519,14 @@ export default function EcoArborApp() {
     // C. Canopy Area (A, m²)
     const canopyArea = Math.PI * Math.pow(canopyDiameter / 2, 2);
 
-    // Wind adjusted deposition velocity Vd (m/s)
-    let vdMPS = 0;
-    if (activeSpecies.type === 'Conifer') {
-      vdMPS = activeSpecies.baseVd + (0.0005 * windSpeed);
-    } else {
-      vdMPS = activeSpecies.baseVd + (0.0002 * windSpeed);
-    }
-    const vdPerHour = vdMPS * 3600; // convert to m/hr
-
-    // Ambient concentration C (converted from ug/m3 to g/m3)
-    const cGperM3 = pm25 * 1e-6;
-
-    // Deposition flux F = Vd * C (g/m²/hr)
-    const F = vdPerHour * cGperM3;
-
-    // Total Mass Intercepted P = F * LAI * A * 1000 (mg/hour)
-    const pm25Intercepted = F * activeLai * canopyArea * 1000;
+    // Resistance-based PM2.5 Deposition Model (Zhang et al. 2001 / Nowak et al. 2013)
+    const pm25Calc = calculatePM25Deposition({
+      windSpeed,
+      LAI: activeLai,
+      canopyDiameter,
+      ambientPM25: pm25,
+      speciesLeafType: activeSpecies.type,
+    });
 
     // D. Canopy Stormwater Interception (I, Liters)
     // I = Sc * LAI * A
@@ -545,10 +537,11 @@ export default function EcoArborApp() {
       carbonContent,
       co2e,
       canopyArea,
-      vdMPS,
-      vdPerHour,
-      flux: F,
-      pm25Intercepted,
+      vdMPS: pm25Calc.vdMPS,
+      vdPerHour: pm25Calc.vdPerHour,
+      flux: pm25Calc.flux,
+      pm25Intercepted: pm25Calc.pm25Intercepted,
+      pm25Details: pm25Calc,
       stormwater,
       activeLai,
       activeSc
@@ -582,16 +575,14 @@ export default function EcoArborApp() {
       const activeLai = (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') ? 0.1 : activeSpecies.lai;
       const activeSc = (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') ? activeSpecies.sc * 0.3 : activeSpecies.sc;
 
-      let vdMPS = 0;
-      if (activeSpecies.type === 'Conifer') {
-        vdMPS = activeSpecies.baseVd + (0.0005 * windSpeed);
-      } else {
-        vdMPS = activeSpecies.baseVd + (0.0002 * windSpeed);
-      }
-      const vdPerHour = vdMPS * 3600;
-      const cGperM3 = pm25 * 1e-6;
-      const F = vdPerHour * cGperM3;
-      const pm25Intercepted = F * activeLai * canopyArea * 1000;
+      const pm25CalcProj = calculatePM25Deposition({
+        windSpeed,
+        LAI: activeLai,
+        canopyDiameter: projectedCanopyDiam,
+        ambientPM25: pm25,
+        speciesLeafType: activeSpecies.type,
+      });
+      const pm25Intercepted = pm25CalcProj.pm25Intercepted;
       const stormwater = activeSc * activeLai * canopyArea;
 
       const netCo2Gain = Math.max(0, co2e - metrics.co2e);
@@ -2063,33 +2054,37 @@ export default function EcoArborApp() {
                       <div className="flex items-center justify-between border-b border-white/10 pb-2">
                         <h4 className="text-sm font-bold text-sky-400 flex items-center gap-2">
                           <Calculator className="w-4 h-4" />
-                          i-Tree PM2.5 Deposition Mathematical Disclosures
+                          i-Tree Resistance-Based PM2.5 Deposition Model (Zhang et al. 2001)
                         </h4>
                         <button onClick={() => setInspectingMetric(null)} className="text-xs text-white/40 hover:text-white/80 cursor-pointer">Close</button>
                       </div>
                       <div className="text-xs text-white/70 space-y-3 font-mono leading-relaxed">
                         <div>
-                          <span className="text-white/40 block">Step 1: Determine Canopy Ground Area (A)</span>
-                          <span className="text-white/60">Formula:</span> A = π * (Canopy_Diameter / 2)²<br/>
-                          <span className="text-white/60">Substitution:</span> A = 3.14159 * ({canopyDiameter.toFixed(1)} / 2)²<br/>
-                          <span className="text-sky-400 font-semibold">Output:</span> A = <span className="text-white">{metrics.canopyArea.toFixed(4)} m²</span>
+                          <span className="text-white/40 block">Step 1: Aerodynamic Resistance (Ra)</span>
+                          <span className="text-white/60">Formula:</span> Ra = [ln(zr / z0)]² / (k² * Wind_Speed)  [zr=10m, k=0.4, z0={metrics.pm25Details.z0}m]<br/>
+                          <span className="text-white/60">Substitution:</span> Ra = [ln(10 / {metrics.pm25Details.z0})]² / (0.16 * {windSpeed.toFixed(1)})<br/>
+                          <span className="text-sky-400 font-semibold">Output (s/m):</span> Ra = <span className="text-white">{metrics.pm25Details.Ra.toFixed(2)} s/m</span>
                         </div>
                         <div>
-                          <span className="text-white/40 block">Step 2: Compute Wind-Adjusted Deposition Velocity (Vd)</span>
-                          <span className="text-white/60">Formula:</span> {activeSpecies.type === 'Conifer' ? 'Vd = Base_Vd + (0.0005 * Wind)' : 'Vd = Base_Vd + (0.0002 * Wind)'} m/s<br/>
-                          <span className="text-white/60">Substitution:</span> Vd = {activeSpecies.baseVd} + ({activeSpecies.type === 'Conifer' ? '0.0005' : '0.0002'} * {windSpeed.toFixed(1)})<br/>
-                          <span className="text-sky-400 font-semibold">Output (m/s):</span> Vd = <span className="text-white">{metrics.vdMPS.toFixed(6)} m/s</span><br/>
-                          <span className="text-white/60">Convert to m/hr:</span> Vd = {metrics.vdMPS.toFixed(6)} * 3600 = <span className="text-white">{metrics.vdPerHour.toFixed(4)} m/hr</span>
+                          <span className="text-white/40 block">Step 2: Quasi-Laminar Boundary Layer Resistance (Rb)</span>
+                          <span className="text-white/60">Value:</span> Rb = {metrics.pm25Details.Rb} s/m ({activeSpecies.type.toLowerCase().includes('conifer') ? 'Conifer fine needle geometry' : 'Broadleaf surface boundary'})
                         </div>
                         <div>
-                          <span className="text-white/40 block">Step 3: Convert Ambient PM2.5 Concentration to g/m³</span>
-                          <span className="text-white/60">Formula:</span> C = Ambient * 1e-6<br/>
-                          <span className="text-white/60">Substitution:</span> C = {pm25} * 0.000001 = <span className="text-white">{(pm25 * 1e-6).toFixed(8)} g/m³</span>
+                          <span className="text-white/40 block">Step 3: Canopy Surface Resistance (Rc)</span>
+                          <span className="text-white/60">Formula:</span> Rc = Rc_base / (LAI / LAI_ref)  [Rc_base={metrics.pm25Details.RcBase} s/m, LAI_ref=5.0]<br/>
+                          <span className="text-white/60">Substitution:</span> Rc = {metrics.pm25Details.RcBase} / ({metrics.activeLai.toFixed(1)} / 5.0)<br/>
+                          <span className="text-sky-400 font-semibold">Output (s/m):</span> Rc = <span className="text-white">{metrics.pm25Details.Rc.toFixed(2)} s/m</span>
                         </div>
                         <div>
-                          <span className="text-white/40 block">Step 4: Compute Total Hourly Intercepted Mass (P)</span>
-                          <span className="text-white/60">Formula:</span> P = Vd_hr * C * LAI * A * 1000 mg/hr<br/>
-                          <span className="text-white/60">Substitution:</span> P = {metrics.vdPerHour.toFixed(4)} * {(pm25 * 1e-6).toFixed(8)} * {activeSpecies.lai} * {metrics.canopyArea.toFixed(4)} * 1000<br/>
+                          <span className="text-white/40 block">Step 4: Total Resistance & Deposition Velocity (Vd)</span>
+                          <span className="text-white/60">Total Resistance:</span> Rtotal = Ra + Rb + Rc = {metrics.pm25Details.Ra.toFixed(2)} + {metrics.pm25Details.Rb} + {metrics.pm25Details.Rc.toFixed(2)} = <span className="text-white">{metrics.pm25Details.Rtotal.toFixed(2)} s/m</span><br/>
+                          <span className="text-white/60">Deposition Velocity:</span> Vd = 1 / Rtotal = <span className="text-white">{metrics.pm25Details.vdMPS.toFixed(6)} m/s</span><br/>
+                          <span className="text-white/60">Convert to m/hr:</span> Vd_hourly = {metrics.pm25Details.vdMPS.toFixed(6)} * 3600 = <span className="text-white">{metrics.pm25Details.vdPerHour.toFixed(2)} m/hr</span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block">Step 5: Compute Total Hourly Intercepted PM2.5 Mass Flux (P)</span>
+                          <span className="text-white/60">Formula:</span> P = Vd_hourly * C(g/m³) * A(m²) * 1000 mg/hr<br/>
+                          <span className="text-white/60">Substitution:</span> P = {metrics.pm25Details.vdPerHour.toFixed(2)} * {(pm25 * 1e-6).toFixed(8)} * {metrics.canopyArea.toFixed(4)} * 1000<br/>
                           <span className="text-sky-400 font-bold">Calculated Interception:</span> <span className="text-sky-300 bg-sky-950 px-1.5 py-0.5 rounded border border-sky-500/20">{metrics.pm25Intercepted.toFixed(2)} mg/hour</span>
                         </div>
                       </div>
@@ -2283,92 +2278,111 @@ export default function EcoArborApp() {
 
               {/* Recharts LineChart Visualizer for Cumulative Sequestration Trajectory */}
               <div className="mt-8 pt-6 border-t border-white/10">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-5">
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-400" />
-                      50-Year Cumulative Carbon Sequestration Trajectory
-                    </h3>
-                    <p className="text-xs text-white/50 mt-0.5">
-                      Interactive allometric growth curve plotting projected carbon mass across 10, 20, and 50-year horizons
-                    </p>
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 shadow-lg shadow-emerald-500/5">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                        50-Year Cumulative Carbon Sequestration Trajectory
+                      </h3>
+                      <p className="text-xs text-white/60 mt-0.5 font-sans">
+                        Interactive allometric growth curve plotting projected carbon mass across 10, 20, and 50-year horizons
+                      </p>
+                    </div>
                   </div>
 
                   {/* Metric Switcher */}
-                  <div className="flex items-center gap-2 bg-white/[0.04] p-1 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-xl border border-white/10 self-stretch sm:self-auto justify-center">
                     <button
                       type="button"
                       onClick={() => setTrajectoryChartMetric('co2e')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
                         trajectoryChartMetric === 'co2e'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
-                          : 'text-white/50 hover:text-white'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm shadow-emerald-500/10'
+                          : 'text-white/50 hover:text-white hover:bg-white/[0.04]'
                       }`}
                     >
+                      <div className={`w-2 h-2 rounded-full ${trajectoryChartMetric === 'co2e' ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
                       Total CO₂e Stored
                     </button>
                     <button
                       type="button"
                       onClick={() => setTrajectoryChartMetric('netGain')}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
                         trajectoryChartMetric === 'netGain'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
-                          : 'text-white/50 hover:text-white'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm shadow-emerald-500/10'
+                          : 'text-white/50 hover:text-white hover:bg-white/[0.04]'
                       }`}
                     >
+                      <div className={`w-2 h-2 rounded-full ${trajectoryChartMetric === 'netGain' ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
                       Net Gain (+kg)
                     </button>
                   </div>
                 </div>
 
                 {/* Chart Box */}
-                <div className="bg-slate-950/70 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-inner">
-                  <div className="h-[280px] w-full">
+                <div className="bg-white/[0.02] backdrop-blur-xl border border-white/10 hover:border-emerald-500/20 rounded-2xl p-4 sm:p-6 shadow-2xl transition-all duration-300 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+                  
+                  <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={growthTrajectoryData} margin={{ top: 20, right: 25, left: 10, bottom: 5 }}>
+                      <AreaChart data={growthTrajectoryData} margin={{ top: 15, right: 20, left: 0, bottom: 5 }}>
                         <defs>
                           <linearGradient id="carbonGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                            <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />
+                            <stop offset="60%" stopColor="#10b981" stopOpacity={0.08} />
+                            <stop offset="100%" stopColor="#059669" stopOpacity={0.00} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                        <CartesianGrid strokeDasharray="4 4" stroke="rgba(255, 255, 255, 0.06)" vertical={false} />
                         <XAxis 
                           dataKey="yearLabel" 
-                          stroke="#94a3b8" 
+                          stroke="rgba(255, 255, 255, 0.3)" 
                           fontSize={11} 
+                          fontFamily="monospace"
                           tickLine={false} 
-                          axisLine={{ stroke: '#475569' }} 
+                          axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }} 
+                          dy={6}
                         />
                         <YAxis 
-                          stroke="#94a3b8" 
+                          stroke="rgba(255, 255, 255, 0.3)" 
                           fontSize={11} 
+                          fontFamily="monospace"
                           tickLine={false} 
-                          axisLine={{ stroke: '#475569' }}
-                          tickFormatter={(val) => `${val.toLocaleString()} kg`}
+                          axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }}
+                          tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k kg` : `${val} kg`}
+                          dx={-4}
                         />
                         <Tooltip 
+                          cursor={{ stroke: 'rgba(52, 211, 153, 0.3)', strokeWidth: 1.5, strokeDasharray: '4 4' }}
                           content={({ active, payload }) => {
                             if (active && payload && payload.length) {
                               const data = payload[0].payload;
                               return (
-                                <div className="bg-slate-900/95 backdrop-blur-xl border border-emerald-500/30 p-3.5 rounded-xl shadow-2xl text-xs space-y-2 max-w-[240px]">
-                                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                                    <span className="font-mono font-bold text-emerald-400">{data.yearLabel}</span>
-                                    <span className="text-[10px] text-white/40 font-mono">Year {new Date().getFullYear() + data.year}</span>
+                                <div className="bg-slate-900/90 backdrop-blur-xl border border-emerald-500/30 p-4 rounded-xl shadow-2xl text-xs space-y-2.5 min-w-[220px]">
+                                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                    <span className="font-mono font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                                      {data.yearLabel}
+                                    </span>
+                                    <span className="text-[10px] text-white/50 font-mono bg-white/[0.06] px-2 py-0.5 rounded border border-white/10">
+                                      Year {new Date().getFullYear() + data.year}
+                                    </span>
                                   </div>
-                                  <div className="space-y-1 font-mono text-[11px]">
+                                  <div className="space-y-1.5 font-mono text-[11px]">
                                     <div className="flex justify-between items-center">
                                       <span className="text-white/60">Total CO₂e Stored:</span>
-                                      <span className="font-bold text-white">{data.co2e.toLocaleString()} kg</span>
+                                      <span className="font-bold text-white font-mono">{data.co2e.toLocaleString()} kg</span>
                                     </div>
                                     <div className="flex justify-between items-center">
                                       <span className="text-white/60">Net Sequestration:</span>
-                                      <span className="font-bold text-emerald-400">+{data.netGain.toLocaleString()} kg</span>
+                                      <span className="font-bold text-emerald-400 font-mono">+{data.netGain.toLocaleString()} kg</span>
                                     </div>
-                                    <div className="flex justify-between items-center pt-1 border-t border-white/10 text-[10px]">
-                                      <span className="text-white/40">DBH / Canopy:</span>
-                                      <span className="text-sky-300">{data.dbh} cm / {data.canopy} m</span>
+                                    <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[10px]">
+                                      <span className="text-white/40">Tree Dimensions:</span>
+                                      <span className="text-sky-300 font-semibold">{data.dbh} cm DBH &middot; {data.canopy} m Canopy</span>
                                     </div>
                                   </div>
                                 </div>
@@ -2380,31 +2394,57 @@ export default function EcoArborApp() {
                         <Area 
                           type="monotone" 
                           dataKey={trajectoryChartMetric} 
-                          stroke="#10b981" 
+                          stroke="#34d399" 
                           strokeWidth={2.5} 
                           fillOpacity={1} 
                           fill="url(#carbonGradient)" 
-                          activeDot={{ r: 7, stroke: '#10b981', strokeWidth: 2, fill: '#022c22' }}
+                          dot={(props: { cx?: number; cy?: number; index?: number; payload?: { isMilestone?: boolean } }) => {
+                            const { cx, cy, index, payload } = props;
+                            if (!cx || !cy) return null;
+                            if (payload?.isMilestone) {
+                              return (
+                                <g key={`dot-${index ?? 0}-${cx}-${cy}`}>
+                                  <circle cx={cx} cy={cy} r={6} fill="#022c22" stroke="#34d399" strokeWidth={2} />
+                                  <circle cx={cx} cy={cy} r={2.5} fill="#34d399" />
+                                </g>
+                              );
+                            }
+                            return <circle key={`dot-small-${index ?? 0}-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill="#10b981" opacity={0.6} />;
+                          }}
+                          activeDot={{ r: 7, stroke: '#34d399', strokeWidth: 2.5, fill: '#022c22' }}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Milestone Ribbon */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/10 text-center">
-                    {growthTrajectoryData.filter(d => d.isMilestone).map((m) => (
-                      <div key={m.year} className="bg-white/[0.02] border border-white/10 rounded-xl p-2.5 backdrop-blur-sm">
-                        <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-400 block mb-0.5">
-                          {m.year === 0 ? 'Baseline (Present)' : `${m.year} Year Horizon`}
-                        </span>
-                        <span className="text-sm font-bold font-mono text-white block">
-                          {trajectoryChartMetric === 'co2e' ? `${m.co2e.toLocaleString()} kg` : `+${m.netGain.toLocaleString()} kg`}
-                        </span>
-                        <span className="text-[10px] text-white/40 font-mono">
-                          {m.dbh} cm DBH &middot; {m.canopy} m Canopy
-                        </span>
-                      </div>
-                    ))}
+                  {/* Milestone Horizon Cards Grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-white/10">
+                    {growthTrajectoryData.filter(d => d.isMilestone).map((m) => {
+                      const pctGrowth = metrics.co2e > 0 ? ((m.co2e - metrics.co2e) / metrics.co2e) * 100 : 0;
+                      return (
+                        <div 
+                          key={m.year} 
+                          className="bg-white/[0.03] backdrop-blur-md border border-white/10 hover:border-emerald-500/30 transition-all rounded-xl p-3.5 shadow-lg group/card relative overflow-hidden"
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-400/90 flex items-center gap-1">
+                              {m.year === 0 ? 'Baseline (Present)' : `${m.year} Year Horizon`}
+                            </span>
+                            {m.year > 0 && (
+                              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                +{pctGrowth.toFixed(0)}%
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-base font-bold font-mono text-white block tracking-tight">
+                            {trajectoryChartMetric === 'co2e' ? `${m.co2e.toLocaleString()} kg` : `+${m.netGain.toLocaleString()} kg`}
+                          </span>
+                          <span className="text-[10px] text-white/50 font-mono mt-1 block">
+                            {m.dbh} cm DBH &middot; {m.canopy} m Canopy
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
