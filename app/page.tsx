@@ -1,21 +1,10 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
 import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
-
-const TreeMap = dynamic(() => import('@/components/TreeMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-[450px] sm:h-[500px] rounded-2xl bg-slate-950 border border-white/10 flex flex-col items-center justify-center gap-3 text-white/50">
-      <Compass className="w-8 h-8 text-emerald-400 animate-spin" />
-      <span className="text-xs font-mono">Initializing Geographic Forest Stand Map...</span>
-    </div>
-  )
-});
 import { 
   Download, 
   Plus, 
@@ -3042,22 +3031,7 @@ export default function EcoArborApp() {
           </div>
         )}
 
-        {/* Geographic Forest Stand World Map Visualization */}
-        <div className="mt-2">
-          <TreeMap
-            trees={treesForMap}
-            selectedTreeIds={selectedLogIds}
-            activeLocation={liveLocation ? { lat: liveLocation.lat, lon: liveLocation.lon, name: liveLocationName } : null}
-            onSelectTree={(id) => {
-              if (!selectedLogIds.includes(id)) {
-                setSelectedLogIds(prev => [...prev, id]);
-              }
-            }}
-            onDeleteTree={handleDeleteLog}
-            onAddTreeAtLocation={handleAddTreeAtLocation}
-            activeSpeciesName={activeSpecies.name}
-          />
-        </div>
+
 
         {/* Field Log Table */}
         <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 overflow-hidden">
