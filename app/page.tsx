@@ -1,10 +1,21 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
+
+const TreeMap = dynamic(() => import('@/components/TreeMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[450px] sm:h-[500px] rounded-2xl bg-slate-950 border border-white/10 flex flex-col items-center justify-center gap-3 text-white/50">
+      <Compass className="w-8 h-8 text-emerald-400 animate-spin" />
+      <span className="text-xs font-mono">Initializing Geographic Forest Stand Map...</span>
+    </div>
+  )
+});
 import { 
   Download, 
   Plus, 
@@ -162,6 +173,9 @@ type LoggedTree = {
   pm25: number;
   stormwater: number;
   timestamp: string;
+  lat?: number;
+  lon?: number;
+  locationName?: string;
 };
 
 export default function EcoArborApp() {
@@ -671,7 +685,30 @@ export default function EcoArborApp() {
     }, { co2e: 0, pm25: 0, stormwater: 0, count: 0 });
   }, [logs, selectedLogIds]);
 
+  // Format logs for Map representation with latitude and longitude fallback calculations
+  const treesForMap = useMemo(() => {
+    return logs.map((log, index) => {
+      const baseLat = liveLocation?.lat ?? 30.3165;
+      const baseLon = liveLocation?.lon ?? 78.0322;
+      const defaultLat = baseLat + (index * 0.0006 * Math.sin(index + 1));
+      const defaultLon = baseLon + (index * 0.0006 * Math.cos(index + 1));
+      return {
+        ...log,
+        lat: log.lat ?? defaultLat,
+        lon: log.lon ?? defaultLon
+      };
+    });
+  }, [logs, liveLocation]);
+
   const handleLogTree = () => {
+    const baseLat = liveLocation?.lat ?? 30.3165;
+    const baseLon = liveLocation?.lon ?? 78.0322;
+    const countNear = logs.filter(l => Math.abs((l.lat ?? baseLat) - baseLat) < 0.005 && Math.abs((l.lon ?? baseLon) - baseLon) < 0.005).length;
+    const angle = (countNear * 137.5 * Math.PI) / 180;
+    const radius = countNear === 0 ? 0 : 0.0006 + (countNear * 0.0003);
+    const lat = baseLat + Math.sin(angle) * radius;
+    const lon = baseLon + Math.cos(angle) * radius;
+
     const newLog: LoggedTree = {
       id: Math.random().toString(36).substring(2, 9).toUpperCase(),
       speciesId: activeSpecies.id,
@@ -683,7 +720,10 @@ export default function EcoArborApp() {
       co2e: metrics.co2e,
       pm25: metrics.pm25Intercepted,
       stormwater: metrics.stormwater,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      lat,
+      lon,
+      locationName: liveLocationName
     };
     setLogs(prev => [newLog, ...prev]);
     setSelectedLogIds(prev => [newLog.id, ...prev]);
@@ -694,6 +734,32 @@ export default function EcoArborApp() {
       setAddedSuccess(false);
     }, 2500);
   };
+
+  const handleAddTreeAtLocation = useCallback((lat: number, lon: number, locationName?: string) => {
+    const newLog: LoggedTree = {
+      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
+      speciesId: activeSpecies.id,
+      speciesName: activeSpecies.name,
+      scientificName: activeSpecies.scientificName,
+      dbh,
+      canopyDiameter,
+      canopyArea: metrics.canopyArea,
+      co2e: metrics.co2e,
+      pm25: metrics.pm25Intercepted,
+      stormwater: metrics.stormwater,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      lat,
+      lon,
+      locationName: locationName || `${lat.toFixed(4)}°, ${lon.toFixed(4)}°`
+    };
+    setLogs(prev => [newLog, ...prev]);
+    setSelectedLogIds(prev => [newLog.id, ...prev]);
+
+    setAddedSuccess(true);
+    setTimeout(() => {
+      setAddedSuccess(false);
+    }, 2500);
+  }, [activeSpecies, dbh, canopyDiameter, metrics]);
 
   const handleClearLogs = () => {
     setLogs([]);
@@ -2975,6 +3041,23 @@ export default function EcoArborApp() {
             </div>
           </div>
         )}
+
+        {/* Geographic Forest Stand World Map Visualization */}
+        <div className="mt-2">
+          <TreeMap
+            trees={treesForMap}
+            selectedTreeIds={selectedLogIds}
+            activeLocation={liveLocation ? { lat: liveLocation.lat, lon: liveLocation.lon, name: liveLocationName } : null}
+            onSelectTree={(id) => {
+              if (!selectedLogIds.includes(id)) {
+                setSelectedLogIds(prev => [...prev, id]);
+              }
+            }}
+            onDeleteTree={handleDeleteLog}
+            onAddTreeAtLocation={handleAddTreeAtLocation}
+            activeSpeciesName={activeSpecies.name}
+          />
+        </div>
 
         {/* Field Log Table */}
         <div className="bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 hover:border-white/20 overflow-hidden">
