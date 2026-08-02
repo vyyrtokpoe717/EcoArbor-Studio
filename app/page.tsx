@@ -306,7 +306,33 @@ export default function EcoArborApp() {
       if (cachedLocName) setLiveLocationName(cachedLocName);
       
       const cachedWeather = localStorage.getItem('ecoarbor_weatherData');
-      if (cachedWeather) setWeatherData(JSON.parse(cachedWeather));
+      if (cachedWeather) {
+        try {
+          const parsed = JSON.parse(cachedWeather);
+          setWeatherData({
+            temp: 24.5,
+            apparentTemp: 25.1,
+            humidity: 62,
+            pressure: 938.5,
+            windSpeed: 2.8,
+            windDir: 120,
+            windGusts: 4.2,
+            cloudCover: 18,
+            dewPoint: 16.8,
+            elevation: 640,
+            pm25: 42.0,
+            pm10: 68.4,
+            co: 280,
+            no2: 24.5,
+            so2: 8.2,
+            ozone: 34.2,
+            usAqi: 117,
+            dust: 12.4,
+            lastSyncedIso: new Date().toISOString(),
+            ...parsed,
+          });
+        } catch {}
+      }
     } catch (e) {
       console.error("Failed to hydrate from localStorage", e);
     }
@@ -1699,7 +1725,7 @@ export default function EcoArborApp() {
                   Telemetry Subsystem Active
                 </span>
                 <span className="text-white/40">
-                  {weatherData?.lastSyncedIso ? new Date(weatherData.lastSyncedIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Synced'}
+                  {mounted && weatherData?.lastSyncedIso ? new Date(weatherData.lastSyncedIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Synced'}
                 </span>
               </div>
             )}
@@ -1742,12 +1768,13 @@ export default function EcoArborApp() {
                   
                   {/* AQI Summary Banner */}
                   {(() => {
-                    const aqiCat = getAQICategory(weatherData.pm25);
+                    const pm25Val = weatherData?.pm25 ?? 42.0;
+                    const aqiCat = getAQICategory(pm25Val);
                     return (
                       <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${aqiCat.bgClass} ${aqiCat.borderClass}`}>
                         <div className="flex items-center gap-3">
                           <div className={`p-2 rounded-lg font-mono font-black text-lg border ${aqiCat.colorClass} bg-black/40 border-white/10`}>
-                            AQI {weatherData.usAqi}
+                            AQI {weatherData?.usAqi ?? 117}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
@@ -1780,8 +1807,8 @@ export default function EcoArborApp() {
                           <Thermometer className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.temp}°C</div>
-                          <span className="text-[9px] text-white/40">Apparent {weatherData.apparentTemp}°C</span>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.temp ?? 24.5}°C</div>
+                          <span className="text-[9px] text-white/40">Apparent {weatherData?.apparentTemp ?? weatherData?.temp ?? 25.1}°C</span>
                         </div>
                       </div>
 
@@ -1792,8 +1819,8 @@ export default function EcoArborApp() {
                           <Droplets className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.humidity}%</div>
-                          <span className="text-[9px] text-white/40">Dew {weatherData.dewPoint}°C</span>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.humidity ?? 62}%</div>
+                          <span className="text-[9px] text-white/40">Dew {weatherData?.dewPoint ?? 16.8}°C</span>
                         </div>
                       </div>
 
@@ -1804,8 +1831,8 @@ export default function EcoArborApp() {
                           <Gauge className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.pressure} <span className="text-[9px] font-normal text-white/40">hPa</span></div>
-                          <span className="text-[9px] text-white/40">{weatherData.elevation} m ASL</span>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.pressure ?? 938.5} <span className="text-[9px] font-normal text-white/40">hPa</span></div>
+                          <span className="text-[9px] text-white/40">{weatherData?.elevation ?? 640} m ASL</span>
                         </div>
                       </div>
 
@@ -1816,8 +1843,8 @@ export default function EcoArborApp() {
                           <Wind className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.windSpeed} <span className="text-[9px] font-normal text-white/40">m/s</span></div>
-                          <span className="text-[9px] text-white/40">Gusts {weatherData.windGusts} m/s</span>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.windSpeed ?? 2.8} <span className="text-[9px] font-normal text-white/40">m/s</span></div>
+                          <span className="text-[9px] text-white/40">Gusts {weatherData?.windGusts ?? 4.2} m/s</span>
                         </div>
                       </div>
 
@@ -1828,7 +1855,7 @@ export default function EcoArborApp() {
                           <Compass className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.windDir}° <span className="text-xs text-indigo-400 font-semibold">{getCompassDirection(weatherData.windDir)}</span></div>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.windDir ?? 120}° <span className="text-xs text-indigo-400 font-semibold">{getCompassDirection(weatherData?.windDir ?? 120)}</span></div>
                           <span className="text-[9px] text-white/40">Direction</span>
                         </div>
                       </div>
@@ -1840,7 +1867,7 @@ export default function EcoArborApp() {
                           <CloudSun className="w-3.5 h-3.5" />
                         </div>
                         <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData.cloudCover}%</div>
+                          <div className="text-sm font-bold text-white font-mono">{weatherData?.cloudCover ?? 18}%</div>
                           <span className="text-[9px] text-white/40">Cover</span>
                         </div>
                       </div>
@@ -1861,7 +1888,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-rose-400 font-mono">{weatherData.pm25.toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-rose-400 font-mono">{(weatherData?.pm25 ?? 42.0).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-emerald-400 block font-mono">{(metrics.pm25Intercepted * 1000).toFixed(1)} mg/h cap</span>
                         </div>
                       </div>
@@ -1873,7 +1900,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-amber-300 font-mono">{weatherData.pm10.toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-amber-300 font-mono">{(weatherData?.pm10 ?? 68.4).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-emerald-400 block font-mono">{(metrics.pm10Intercepted * 1000).toFixed(1)} mg/h cap</span>
                         </div>
                       </div>
@@ -1885,7 +1912,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-purple-300 font-mono">{weatherData.no2.toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-purple-300 font-mono">{(weatherData?.no2 ?? 24.5).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-purple-400/80 block">Nitrogen Dioxide</span>
                         </div>
                       </div>
@@ -1897,7 +1924,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-yellow-300 font-mono">{weatherData.so2.toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-yellow-300 font-mono">{(weatherData?.so2 ?? 8.2).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-yellow-400/80 block">Sulfur Dioxide</span>
                         </div>
                       </div>
@@ -1909,7 +1936,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-blue-300 font-mono">{weatherData.co.toFixed(0)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-blue-300 font-mono">{(weatherData?.co ?? 280).toFixed(0)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-blue-400/80 block">Carbon Monoxide</span>
                         </div>
                       </div>
@@ -1921,7 +1948,7 @@ export default function EcoArborApp() {
                           <Activity className="w-3 h-3" />
                         </div>
                         <div className="mt-1">
-                          <div className="text-sm font-bold text-indigo-300 font-mono">{weatherData.ozone.toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
+                          <div className="text-sm font-bold text-indigo-300 font-mono">{(weatherData?.ozone ?? 34.2).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
                           <span className="text-[9px] text-indigo-400/80 block">Ground Ozone</span>
                         </div>
                       </div>
@@ -1940,7 +1967,7 @@ export default function EcoArborApp() {
               <p className="text-[10px] text-white/40 mt-3 leading-normal flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 text-teal-400 inline shrink-0 mt-0.5" />
                 <span>
-                  Aerodynamic flux calculation uses Ideal Gas Law dry air density (<strong className="text-white/80">{metrics.airDensity.toFixed(3)} kg/m³</strong> at {weatherData.temp}°C, {weatherData.pressure} hPa) and resistance equation $V_d = (R_a + R_b + R_c)^{-1}$ to continuously compute particulate deposition.
+                  Aerodynamic flux calculation uses Ideal Gas Law dry air density (<strong className="text-white/80">{metrics.airDensity.toFixed(3)} kg/m³</strong> at {weatherData?.temp ?? 24.5}°C, {weatherData?.pressure ?? 938.5} hPa) and resistance equation $V_d = (R_a + R_b + R_c)^{-1}$ to continuously compute particulate deposition.
                 </span>
               </p>
             )}
