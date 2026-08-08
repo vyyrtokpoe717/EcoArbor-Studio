@@ -964,8 +964,8 @@ export default function EcoArborApp() {
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
-    doc.text(`Ambient Air Quality (PM2.5): ${weatherData?.pm25.toFixed(1) || '42.0'} ug/m3  |  Ambient Wind Speed: ${weatherData?.windSpeed.toFixed(1) || '2.8'} m/s`, 15, 54);
+    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation?.lat != null && liveLocation?.lon != null ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
+    doc.text(`Ambient Air Quality (PM2.5): ${(weatherData?.pm25 ?? 42.0).toFixed(1)} ug/m3  |  Ambient Wind Speed: ${(weatherData?.windSpeed ?? 2.8).toFixed(1)} m/s`, 15, 54);
 
     // ==========================================
     // VISUAL SUMMARY CHART: AGGREGATE STAND BENEFITS
