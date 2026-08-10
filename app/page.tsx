@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { calculatePM25Deposition, getAQICategory } from '@/lib/pm25';
+import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
@@ -35,11 +35,7 @@ import {
   Clock,
   TrendingUp,
   X,
-  RotateCcw,
-  Gauge,
-  Navigation,
-  Globe,
-  ShieldAlert
+  RotateCcw
 } from 'lucide-react';
 
 type Species = {
@@ -200,66 +196,25 @@ export default function EcoArborApp() {
 
   // Undo Delete Toast States
   const [showUndoToast, setShowUndoToast] = useState(false);
-  const [recentlyDeletedLog, setRecentlyDeletedLog] = useState<{ log: LoggedTree; index: number } | null>(null);  // Live Location and Weather/AQI state - preloaded with FRI Dehradun metrics for instant precision loading
-  const [liveLocation, setLiveLocation] = useState<{ lat: number; lon: number } | null>({ lat: 30.316500, lon: 78.032200 });
-  const [liveLocationName, setLiveLocationName] = useState<string>('Forest Research Institute (FRI HQ), Dehradun, Uttarakhand, India');
-  const [liveAccuracy, setLiveAccuracy] = useState<number | null>(4.5); // meters
-  const [liveLocationDetail, setLiveLocationDetail] = useState<{
-    city?: string;
-    state?: string;
-    country?: string;
-    postcode?: string;
-    suburb?: string;
-    source: 'GPS Satellite' | 'Reverse Geocoded' | 'IP Triangulation' | 'Manual Search';
-  }>({
-    city: 'Dehradun',
-    state: 'Uttarakhand',
-    country: 'India',
-    postcode: '248006',
-    suburb: 'FRI Campus',
-    source: 'GPS Satellite'
-  });
+  const [recentlyDeletedLog, setRecentlyDeletedLog] = useState<{ log: LoggedTree; index: number } | null>(null);
 
+  // Live Location and Weather/AQI state - preloaded with FRI Dehradun metrics for instant loading
+  const [liveLocation, setLiveLocation] = useState<{ lat: number; lon: number } | null>({ lat: 30.3165, lon: 78.0322 });
+  const [liveLocationName, setLiveLocationName] = useState<string>('Dehradun, India (FRI HQ)');
   const [weatherData, setWeatherData] = useState<{
     temp: number;
-    apparentTemp: number;
-    humidity: number;
-    pressure: number;
     windSpeed: number;
     windDir: number;
-    windGusts: number;
-    cloudCover: number;
-    dewPoint: number;
-    elevation: number;
     pm25: number;
-    pm10: number;
     co: number;
-    no2: number;
-    so2: number;
     ozone: number;
-    usAqi: number;
-    dust: number;
-    lastSyncedIso: string;
   } | null>({
     temp: 24.5,
-    apparentTemp: 25.1,
-    humidity: 62,
-    pressure: 938.5,
     windSpeed: 2.8,
     windDir: 120,
-    windGusts: 4.2,
-    cloudCover: 18,
-    dewPoint: 16.8,
-    elevation: 640,
     pm25: 42.0,
-    pm10: 68.4,
     co: 280,
-    no2: 24.5,
-    so2: 8.2,
-    ozone: 34.2,
-    usAqi: 117,
-    dust: 12.4,
-    lastSyncedIso: new Date().toISOString()
+    ozone: 34.2
   });
   const [loadingLive, setLoadingLive] = useState<boolean>(false);
   const [liveError, setLiveError] = useState<string | null>(null);
@@ -306,33 +261,7 @@ export default function EcoArborApp() {
       if (cachedLocName) setLiveLocationName(cachedLocName);
       
       const cachedWeather = localStorage.getItem('ecoarbor_weatherData');
-      if (cachedWeather) {
-        try {
-          const parsed = JSON.parse(cachedWeather);
-          setWeatherData({
-            temp: 24.5,
-            apparentTemp: 25.1,
-            humidity: 62,
-            pressure: 938.5,
-            windSpeed: 2.8,
-            windDir: 120,
-            windGusts: 4.2,
-            cloudCover: 18,
-            dewPoint: 16.8,
-            elevation: 640,
-            pm25: 42.0,
-            pm10: 68.4,
-            co: 280,
-            no2: 24.5,
-            so2: 8.2,
-            ozone: 34.2,
-            usAqi: 117,
-            dust: 12.4,
-            lastSyncedIso: new Date().toISOString(),
-            ...parsed,
-          });
-        } catch {}
-      }
+      if (cachedWeather) setWeatherData(JSON.parse(cachedWeather));
     } catch (e) {
       console.error("Failed to hydrate from localStorage", e);
     }
@@ -368,61 +297,40 @@ export default function EcoArborApp() {
     return directions[index];
   };
 
-  const fetchTelemetry = useCallback(async (
-    lat: number, 
-    lon: number, 
-    locationLabel?: string, 
-    accuracy?: number | null,
-    source: 'GPS Satellite' | 'Reverse Geocoded' | 'IP Triangulation' | 'Manual Search' = 'GPS Satellite',
-    silent: boolean = false
-  ) => {
+  const fetchTelemetry = useCallback(async (lat: number, lon: number, locationLabel?: string, silent: boolean = false) => {
     if (!silent) {
       setLoadingLive(true);
       setLiveError(null);
     }
     setLiveLocation({ lat, lon });
-    if (typeof accuracy === 'number') {
-      setLiveAccuracy(accuracy);
-    } else if (source === 'Manual Search' || source === 'Reverse Geocoded') {
-      setLiveAccuracy(1.0);
-    }
-
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&addressdetails=1`, {
-        headers: { 'Accept-Language': 'en' }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.address) {
-          const addr = data.address;
-          const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || '';
-          const suburb = addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || '';
-          const state = addr.state || addr.region || '';
-          const country = addr.country || '';
-          const postcode = addr.postcode || '';
-
-          setLiveLocationDetail({ city, state, country, postcode, suburb, source });
-
-          if (!locationLabel) {
-            const parts = [suburb, city, state, country].filter(Boolean);
-            const formattedName = parts.length > 0 ? parts.join(', ') : `${lat.toFixed(6)}°, ${lon.toFixed(6)}°`;
-            setLiveLocationName(formattedName);
+    
+    if (locationLabel) {
+      setLiveLocationName(locationLabel);
+    } else {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`, {
+          headers: { 'Accept-Language': 'en' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.suburb || data.address.county || '';
+            const country = data.address.country || '';
+            setLiveLocationName(city ? `${city}, ${country}` : country || 'Unknown Area');
           } else {
-            setLiveLocationName(locationLabel);
+            setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
           }
-        } else if (locationLabel) {
-          setLiveLocationName(locationLabel);
+        } else {
+          setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
         }
-      } else if (locationLabel) {
-        setLiveLocationName(locationLabel);
+      } catch {
+        setLiveLocationName(`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
       }
-    } catch {
-      if (locationLabel) setLiveLocationName(locationLabel);
     }
 
     try {
-      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,dew_point_2m&wind_speed_unit=ms`;
-      const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,us_aqi,dust`;
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m`;
+      const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,carbon_monoxide,ozone`;
 
       const [weatherRes, aqRes] = await Promise.all([
         fetch(weatherUrl),
@@ -430,43 +338,28 @@ export default function EcoArborApp() {
       ]);
 
       if (!weatherRes.ok || !aqRes.ok) {
-        throw new Error('Failed to retrieve precision atmospheric telemetry.');
+        throw new Error('Failed to retrieve atmospheric telemetry.');
       }
 
       const weatherJson = await weatherRes.json();
       const aqJson = await aqRes.json();
 
-      const wCurr = weatherJson.current || {};
-      const aqCurr = aqJson.current || {};
-
-      const windMPS = Number((wCurr.wind_speed_10m ?? 2.8).toFixed(2));
-      const elevation = typeof weatherJson.elevation === 'number' ? weatherJson.elevation : 640;
+      const rawWindSpeed = weatherJson.current.wind_speed_10m;
+      const windMPS = Number((rawWindSpeed / 3.6).toFixed(1));
 
       const parsedWeather = {
-        temp: Number((wCurr.temperature_2m ?? 24.5).toFixed(1)),
-        apparentTemp: Number((wCurr.apparent_temperature ?? wCurr.temperature_2m ?? 24.5).toFixed(1)),
-        humidity: Number((wCurr.relative_humidity_2m ?? 60).toFixed(0)),
-        pressure: Number((wCurr.surface_pressure ?? 1013.25).toFixed(1)),
+        temp: weatherJson.current.temperature_2m,
         windSpeed: windMPS,
-        windDir: Math.round(wCurr.wind_direction_10m ?? 120),
-        windGusts: Number((wCurr.wind_gusts_10m ?? windMPS * 1.4).toFixed(1)),
-        cloudCover: Math.round(wCurr.cloud_cover ?? 15),
-        dewPoint: Number((wCurr.dew_point_2m ?? 16.5).toFixed(1)),
-        elevation: Math.round(elevation),
-        pm25: Number((aqCurr.pm2_5 ?? 42.0).toFixed(1)),
-        pm10: Number((aqCurr.pm10 ?? 68.4).toFixed(1)),
-        co: Number((aqCurr.carbon_monoxide ?? 280).toFixed(0)),
-        no2: Number((aqCurr.nitrogen_dioxide ?? 24.5).toFixed(1)),
-        so2: Number((aqCurr.sulphur_dioxide ?? 8.2).toFixed(1)),
-        ozone: Number((aqCurr.ozone ?? 34.2).toFixed(1)),
-        usAqi: Math.round(aqCurr.us_aqi ?? 115),
-        dust: Number((aqCurr.dust ?? 12.0).toFixed(1)),
-        lastSyncedIso: new Date().toISOString()
+        windDir: weatherJson.current.wind_direction_10m,
+        pm25: aqJson.current.pm2_5,
+        co: aqJson.current.carbon_monoxide,
+        ozone: aqJson.current.ozone
       };
 
       setWeatherData(parsedWeather);
-      setPm25(Math.max(2, Math.min(500, Math.round(parsedWeather.pm25))));
-      setWindSpeed(Math.max(0.1, Math.min(25, windMPS)));
+      
+      setPm25(Math.max(5, Math.min(300, Math.round(parsedWeather.pm25))));
+      setWindSpeed(Math.max(1, Math.min(12, windMPS)));
       setIsSynced(true);
     } catch (err: any) {
       if (!silent) {
@@ -480,14 +373,14 @@ export default function EcoArborApp() {
   }, []);
 
   const fetchIPFallback = useCallback(async (silent: boolean = false) => {
-    // Attempt 1: ipwho.is
+    // Attempt 1: ipwho.is (extremely accurate free tier API)
     try {
       const res = await fetch('https://ipwho.is/');
       if (res.ok) {
         const data = await res.json();
         if (data && data.success && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
           const label = data.city ? `${data.city}, ${data.country || ''}` : `${data.country || 'IP Location'}`;
-          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP Triangulation)', null, 'IP Triangulation', silent);
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)', silent);
           return;
         }
       }
@@ -495,14 +388,14 @@ export default function EcoArborApp() {
       // quiet fallback
     }
 
-    // Attempt 2: freeipapi.com
+    // Attempt 2: freeipapi.com (reliable backup)
     try {
       const res = await fetch('https://freeipapi.com/api/json');
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
           const label = data.cityName ? `${data.cityName}, ${data.countryName || ''}` : `${data.countryName || 'IP Location'}`;
-          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP Triangulation)', null, 'IP Triangulation', silent);
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)', silent);
           return;
         }
       }
@@ -510,14 +403,14 @@ export default function EcoArborApp() {
       // quiet fallback
     }
 
-    // Attempt 3: ipapi.co
+    // Attempt 3: ipapi.co (standard fallback)
     try {
       const res = await fetch('https://ipapi.co/json/');
       if (res.ok) {
         const data = await res.json();
         if (data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
           const label = data.city ? `${data.city}, ${data.country_name || ''}` : `${data.country_name || 'IP Location'}`;
-          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP Triangulation)', null, 'IP Triangulation', silent);
+          await fetchTelemetry(data.latitude, data.longitude, label + ' (IP detected)', silent);
           return;
         }
       }
@@ -526,12 +419,13 @@ export default function EcoArborApp() {
     }
 
     // Attempt 4: Ultimate static fallback (FRI HQ, India)
-    await fetchTelemetry(30.316500, 78.032200, 'Forest Research Institute (FRI HQ), Dehradun, India', 4.5, 'GPS Satellite', silent);
+    await fetchTelemetry(30.3165, 78.0322, 'Dehradun, India (FRI HQ)', silent);
   }, [fetchTelemetry]);
 
   useEffect(() => {
     if (!mounted) return;
 
+    // Only auto-locate on startup if we don't have cached telemetry already!
     const hasCachedTelemetry = localStorage.getItem('ecoarbor_weatherData');
     if (hasCachedTelemetry) return;
 
@@ -541,18 +435,17 @@ export default function EcoArborApp() {
           (position) => {
             const lat = position.coords.latitude;
             const lon = position.coords.longitude;
-            const accuracy = position.coords.accuracy;
-            fetchTelemetry(lat, lon, undefined, accuracy, 'GPS Satellite', true);
+            fetchTelemetry(lat, lon, 'Device Location', true); // Silent background fetch
           },
           () => {
-            fetchIPFallback(true);
+            fetchIPFallback(true); // Silent background fetch
           },
-          { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 }
+          { timeout: 7000, enableHighAccuracy: true }
         );
       } else {
-        fetchIPFallback(true);
+        fetchIPFallback(true); // Silent background fetch
       }
-    }, 500);
+    }, 500); // slight delay to prioritize initial layout render
 
     return () => clearTimeout(timer);
   }, [mounted, fetchTelemetry, fetchIPFallback]);
@@ -565,13 +458,12 @@ export default function EcoArborApp() {
         (position) => {
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
-          const accuracy = position.coords.accuracy;
-          fetchTelemetry(lat, lon, undefined, accuracy, 'GPS Satellite');
+          fetchTelemetry(lat, lon, 'Device Location');
         },
         () => {
           fetchIPFallback();
         },
-        { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
+        { timeout: 7000, enableHighAccuracy: true }
       );
     } else {
       fetchIPFallback();
@@ -584,7 +476,7 @@ export default function EcoArborApp() {
     setLoadingLive(true);
     setLiveError(null);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationSearchQuery)}&format=json&addressdetails=1&limit=3&accept-language=en`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationSearchQuery)}&format=json&limit=3&accept-language=en`);
       if (!res.ok) {
         throw new Error('Search request failed. Please try again.');
       }
@@ -594,12 +486,13 @@ export default function EcoArborApp() {
         const lat = parseFloat(item.lat);
         const lon = parseFloat(item.lon);
         const displayName = item.display_name;
+        // Format beautifully: take first few items of address to avoid extremely long labels
         const parts = displayName.split(',');
         const shortLabel = parts.slice(0, 3).join(',').trim();
-        await fetchTelemetry(lat, lon, shortLabel, 1.0, 'Manual Search');
+        await fetchTelemetry(lat, lon, shortLabel);
         setLocationSearchQuery('');
       } else {
-        throw new Error('Location not found. Please enter a valid city or district.');
+        throw new Error('Location not found. Please specify a city or region.');
       }
     } catch (err: any) {
       setLiveError(err.message || 'Error searching location.');
@@ -609,7 +502,7 @@ export default function EcoArborApp() {
 
   const activeSpecies = useMemo(() => speciesData.find(s => s.id === selectedSpeciesId) || speciesData[0], [selectedSpeciesId]);
 
-  // Real scientific equations computed dynamically with microclimate air density and multi-pollutant factors
+  // Real scientific equations computed dynamically without placeholders
   const metrics = useMemo(() => {
     // Determine active LAI and Sc based on Seasonality
     const activeLai = (seasonalMode === 'winter' && activeSpecies.type === 'Broadleaf') ? 0.1 : activeSpecies.lai;
@@ -624,30 +517,23 @@ export default function EcoArborApp() {
     }
 
     // B. Carbon storage and CO2e
-    const carbonContent = M * 0.50; // 50% carbon fraction
-    const co2e = carbonContent * (44.01 / 12.011);
+    const carbonContent = M * 0.50; // assuming 50% of dry wood biomass is carbon
+    const co2e = carbonContent * (44.01 / 12.011); // ratio of CO2 to C weight
 
     // C. Canopy Area (A, m²)
     const canopyArea = Math.PI * Math.pow(canopyDiameter / 2, 2);
 
-    // Resistance-based PM2.5 Deposition Model with Microclimate Adjustments
+    // Resistance-based PM2.5 Deposition Model (Zhang et al. 2001 / Nowak et al. 2013)
     const pm25Calc = calculatePM25Deposition({
       windSpeed,
       LAI: activeLai,
       canopyDiameter,
       ambientPM25: pm25,
       speciesLeafType: activeSpecies.type,
-      temperature: weatherData?.temp ?? 25,
-      relativeHumidity: weatherData?.humidity ?? 50,
-      surfacePressure: weatherData?.pressure ?? 1013.25,
-      ambientPM10: weatherData?.pm10,
-      ambientNO2: weatherData?.no2,
-      ambientSO2: weatherData?.so2,
-      ambientOzone: weatherData?.ozone,
-      ambientCO: weatherData?.co,
     });
 
     // D. Canopy Stormwater Interception (I, Liters)
+    // I = Sc * LAI * A
     const stormwater = activeSc * activeLai * canopyArea;
 
     return {
@@ -659,18 +545,12 @@ export default function EcoArborApp() {
       vdPerHour: pm25Calc.vdPerHour,
       flux: pm25Calc.flux,
       pm25Intercepted: pm25Calc.pm25Intercepted,
-      pm10Intercepted: pm25Calc.pm10Intercepted,
-      no2Intercepted: pm25Calc.no2Intercepted,
-      so2Intercepted: pm25Calc.so2Intercepted,
-      ozoneIntercepted: pm25Calc.ozoneIntercepted,
-      coIntercepted: pm25Calc.coIntercepted,
-      airDensity: pm25Calc.airDensity,
       pm25Details: pm25Calc,
       stormwater,
       activeLai,
       activeSc
     };
-  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, weatherData]);
+  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode]);
 
   // Dynamic Botanical Growth Forecaster
   const growthProjections = useMemo(() => {
@@ -705,14 +585,6 @@ export default function EcoArborApp() {
         canopyDiameter: projectedCanopyDiam,
         ambientPM25: pm25,
         speciesLeafType: activeSpecies.type,
-        temperature: weatherData?.temp ?? 25,
-        relativeHumidity: weatherData?.humidity ?? 50,
-        surfacePressure: weatherData?.pressure ?? 1013.25,
-        ambientPM10: weatherData?.pm10,
-        ambientNO2: weatherData?.no2,
-        ambientSO2: weatherData?.so2,
-        ambientOzone: weatherData?.ozone,
-        ambientCO: weatherData?.co,
       });
       const pm25Intercepted = pm25CalcProj.pm25Intercepted;
       const stormwater = activeSc * activeLai * canopyArea;
@@ -740,7 +612,7 @@ export default function EcoArborApp() {
       { year: 20, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 20, canopyDiameter + canopyGrowthPerYear * 20, 20) },
       { year: 50, ...getMetricsForDimensions(dbh + dbhGrowthPerYear * 50, canopyDiameter + canopyGrowthPerYear * 50, 50) },
     ];
-  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, metrics.co2e, weatherData]);
+  }, [activeSpecies, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, metrics.co2e]);
 
   // 50-Year Growth & Sequestration Trajectory Curve Data (for recharts Line/Area Chart)
   const growthTrajectoryData = useMemo(() => {
@@ -964,8 +836,8 @@ export default function EcoArborApp() {
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation?.lat != null && liveLocation?.lon != null ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
-    doc.text(`Ambient Air Quality (PM2.5): ${(weatherData?.pm25 ?? 42.0).toFixed(1)} ug/m3  |  Ambient Wind Speed: ${(weatherData?.windSpeed ?? 2.8).toFixed(1)} m/s`, 15, 54);
+    doc.text(`Active Survey Location: ${liveLocationName || 'Dehradun, India (FRI HQ)'} (${liveLocation ? `${liveLocation.lat.toFixed(4)}°N, ${liveLocation.lon.toFixed(4)}°E` : 'Auto-localized GPS'})`, 15, 49);
+    doc.text(`Ambient Air Quality (PM2.5): ${weatherData?.pm25.toFixed(1) || '42.0'} ug/m3  |  Ambient Wind Speed: ${weatherData?.windSpeed.toFixed(1) || '2.8'} m/s`, 15, 54);
 
     // ==========================================
     // VISUAL SUMMARY CHART: AGGREGATE STAND BENEFITS
@@ -1619,7 +1491,7 @@ export default function EcoArborApp() {
         {/* Real-time Location & Telemetry Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* Tile 1: Live Location & Geolocation Precision */}
+          {/* Tile 1: Live Location & Coordinates */}
           <div className="lg:col-span-4 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl p-5 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-white/20 flex flex-col justify-between">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
             
@@ -1630,58 +1502,40 @@ export default function EcoArborApp() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                   </span>
-                  GPS Satellite Precision
+                  Live Coordinates
                 </span>
                 <button
                   onClick={handleManualSync}
                   disabled={loadingLive}
                   className="p-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:border-white/20 hover:bg-white/[0.05] transition-all cursor-pointer text-white/60 hover:text-white disabled:opacity-50"
-                  title="Acquire live GPS signal"
+                  title="Re-sync telemetry"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingLive ? 'animate-spin' : ''}`} />
                 </button>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 bg-emerald-950/80 text-emerald-400 rounded-xl border border-emerald-500/10 shadow-inner mt-0.5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-950/80 text-emerald-400 rounded-xl border border-emerald-500/10 shadow-inner">
                     <MapPin className="w-5 h-5" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs text-white/50 font-medium">Target Site Location</h3>
-                      <span className="text-[9px] font-mono text-emerald-400/90 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                        {liveLocationDetail.source}
-                      </span>
-                    </div>
-                    <p className="text-sm font-semibold text-white/90 leading-tight mt-0.5 line-clamp-2">
-                      {loadingLive ? 'Acquiring Satellite Fix...' : liveLocationName || 'Coordinates Synced'}
+                  <div>
+                    <h3 className="text-xs text-white/50 font-medium">Current Location</h3>
+                    <p className="text-sm font-semibold text-white/90 truncate max-w-[200px]">
+                      {loadingLive ? 'Acquiring GPS...' : liveLocationName || 'Coordinates Synced'}
                     </p>
                   </div>
                 </div>
 
                 {liveLocation ? (
-                  <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-2 gap-2 font-mono">
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5">
-                        <span className="text-[9px] text-white/40 block mb-0.5">LATITUDE</span>
-                        <span className="text-xs font-bold text-white/90">{liveLocation.lat.toFixed(6)}° N</span>
-                      </div>
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5">
-                        <span className="text-[9px] text-white/40 block mb-0.5">LONGITUDE</span>
-                        <span className="text-xs font-bold text-white/90">{liveLocation.lon.toFixed(6)}° E</span>
-                      </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 font-mono">
+                      <span className="text-[10px] text-white/40 block mb-0.5">LATITUDE</span>
+                      <span className="text-xs font-bold text-white/90">{liveLocation.lat.toFixed(5)}°</span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                      <div className="bg-white/[0.02] rounded-xl p-2 border border-white/5 flex items-center justify-between">
-                        <span className="text-white/40">Elevation:</span>
-                        <span className="text-white/80 font-bold">{weatherData?.elevation ?? 640} m ASL</span>
-                      </div>
-                      <div className="bg-white/[0.02] rounded-xl p-2 border border-white/5 flex items-center justify-between">
-                        <span className="text-white/40">Accuracy:</span>
-                        <span className="text-emerald-400 font-bold">±{liveAccuracy ? liveAccuracy.toFixed(1) : '4.5'} m</span>
-                      </div>
+                    <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 font-mono">
+                      <span className="text-[10px] text-white/40 block mb-0.5">LONGITUDE</span>
+                      <span className="text-xs font-bold text-white/90">{liveLocation.lon.toFixed(5)}°</span>
                     </div>
                   </div>
                 ) : (
@@ -1697,46 +1551,40 @@ export default function EcoArborApp() {
                   </div>
                 )}
 
-                {/* Search Address or Coordinates */}
-                <form onSubmit={handleSearchLocation} className="mt-3 pt-2 flex gap-1.5 border-t border-white/5">
+                {/* Manual Precision Search Bar */}
+                <form onSubmit={handleSearchLocation} className="mt-4 pt-1 flex gap-1.5 border-t border-white/5">
                   <input
                     type="text"
                     value={locationSearchQuery}
                     onChange={(e) => setLocationSearchQuery(e.target.value)}
-                    placeholder="Search city, district, or address..."
+                    placeholder="Search city/area..."
                     className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 focus:border-emerald-500/40 transition-all font-sans"
                   />
                   <button
                     type="submit"
                     disabled={loadingLive || !locationSearchQuery.trim()}
-                    className="px-3 py-1.5 text-xs bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition-all cursor-pointer font-medium hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-1"
+                    className="px-3 py-1.5 text-xs bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded-xl transition-all cursor-pointer font-medium hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:scale-100 flex items-center justify-center"
                   >
-                    <Search className="w-3 h-3" />
-                    Locate
+                    Search
                   </button>
                 </form>
               </div>
             </div>
 
             {liveLocation && (
-              <div className="text-[9px] font-mono text-emerald-400/90 bg-emerald-950/40 border border-emerald-500/15 rounded-lg p-2 mt-3 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                  Telemetry Subsystem Active
-                </span>
-                <span className="text-white/40">
-                  {mounted && weatherData?.lastSyncedIso ? new Date(weatherData.lastSyncedIso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Synced'}
-                </span>
+              <div className="text-[9px] font-mono text-emerald-400/80 bg-emerald-950/30 border border-emerald-500/10 rounded-lg p-2 mt-4 flex items-center justify-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                Live location synchronized successfully.
               </div>
             )}
           </div>
 
-          {/* Tile 2: Live Weather & Air Quality Atmospheric Array */}
+          {/* Tile 2: Live Weather & Air Quality Telemetry */}
           <div className="lg:col-span-8 bg-white/[0.04] backdrop-blur-lg border border-white/10 rounded-2xl p-5 shadow-2xl relative overflow-hidden transition-all duration-300 hover:border-white/20 flex flex-col justify-between">
             <div className="absolute top-0 right-0 w-64 h-64 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
             
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-teal-400 bg-teal-950/80 px-2.5 py-1 rounded-full border border-teal-500/20 flex items-center gap-1.5">
                   <CloudSun className="w-3.5 h-3.5" />
                   Atmospheric & Air Quality Telemetry
@@ -1744,14 +1592,14 @@ export default function EcoArborApp() {
                 <div className="flex items-center gap-2">
                   {isSynced && (
                     <span className="text-[10px] font-mono font-medium text-emerald-400 bg-emerald-950 border border-emerald-500/20 px-2 py-0.5 rounded">
-                      ✓ Aerodynamic Resistance Synced
+                      ✓ CAD Models Synced
                     </span>
                   )}
                   <button
                     onClick={handleManualSync}
                     disabled={loadingLive}
                     className="p-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:border-white/20 hover:bg-white/[0.05] transition-all cursor-pointer text-white/60 hover:text-white disabled:opacity-50"
-                    title="Re-sync Open-Meteo Telemetry"
+                    title="Re-sync telemetry"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingLive ? 'animate-spin' : ''}`} />
                   </button>
@@ -1759,199 +1607,86 @@ export default function EcoArborApp() {
               </div>
 
               {loadingLive && !weatherData ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <div className="py-10 flex flex-col items-center justify-center gap-3">
                   <RefreshCw className="w-8 h-8 text-teal-400 animate-spin" />
-                  <p className="text-xs text-white/50">Pulling Open-Meteo High-Resolution Atmospheric & AQI Telemetry...</p>
+                  <p className="text-xs text-white/50">Fetching atmospheric metrics from Open-Meteo API...</p>
                 </div>
               ) : weatherData ? (
-                <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   
-                  {/* AQI Summary Banner */}
-                  {(() => {
-                    const pm25Val = weatherData?.pm25 ?? 42.0;
-                    const aqiCat = getAQICategory(pm25Val);
-                    return (
-                      <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${aqiCat.bgClass} ${aqiCat.borderClass}`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg font-mono font-black text-lg border ${aqiCat.colorClass} bg-black/40 border-white/10`}>
-                            AQI {weatherData?.usAqi ?? 117}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs font-bold ${aqiCat.colorClass}`}>{aqiCat.label}</span>
-                              <span className="text-[10px] font-mono text-white/50 bg-black/30 px-1.5 py-0.5 rounded">US EPA Standard</span>
-                            </div>
-                            <p className="text-[11px] text-white/70 leading-tight mt-0.5">
-                              {aqiCat.description}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right sm:text-right text-[10px] text-white/40 font-mono">
-                          Air Density ($\rho$): <strong className="text-emerald-400 font-bold">{metrics.airDensity.toFixed(3)} kg/m³</strong>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Atmospheric Sensor Array Grid */}
-                  <div>
-                    <h4 className="text-[10px] uppercase tracking-wider font-semibold text-white/40 mb-2 flex items-center gap-1.5">
-                      <Gauge className="w-3 h-3 text-teal-400" />
-                      Atmospheric Microclimate Conditions
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                      {/* Temp */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-orange-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Temp</span>
-                          <Thermometer className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.temp ?? 24.5}°C</div>
-                          <span className="text-[9px] text-white/40">Apparent {weatherData?.apparentTemp ?? weatherData?.temp ?? 25.1}°C</span>
-                        </div>
-                      </div>
-
-                      {/* Humidity */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-sky-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Humidity</span>
-                          <Droplets className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.humidity ?? 62}%</div>
-                          <span className="text-[9px] text-white/40">Dew {weatherData?.dewPoint ?? 16.8}°C</span>
-                        </div>
-                      </div>
-
-                      {/* Pressure */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-emerald-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Pressure</span>
-                          <Gauge className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.pressure ?? 938.5} <span className="text-[9px] font-normal text-white/40">hPa</span></div>
-                          <span className="text-[9px] text-white/40">{weatherData?.elevation ?? 640} m ASL</span>
-                        </div>
-                      </div>
-
-                      {/* Wind Speed */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-teal-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Wind Speed</span>
-                          <Wind className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.windSpeed ?? 2.8} <span className="text-[9px] font-normal text-white/40">m/s</span></div>
-                          <span className="text-[9px] text-white/40">Gusts {weatherData?.windGusts ?? 4.2} m/s</span>
-                        </div>
-                      </div>
-
-                      {/* Wind Heading */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-indigo-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Heading</span>
-                          <Compass className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.windDir ?? 120}° <span className="text-xs text-indigo-400 font-semibold">{getCompassDirection(weatherData?.windDir ?? 120)}</span></div>
-                          <span className="text-[9px] text-white/40">Direction</span>
-                        </div>
-                      </div>
-
-                      {/* Cloud Cover */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-amber-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Cloud Cover</span>
-                          <CloudSun className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="mt-1.5">
-                          <div className="text-sm font-bold text-white font-mono">{weatherData?.cloudCover ?? 18}%</div>
-                          <span className="text-[9px] text-white/40">Cover</span>
-                        </div>
-                      </div>
+                  {/* Temp */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-orange-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Temp</span>
+                      <Thermometer className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.temp}°C</div>
+                      <span className="text-[9px] text-white/30">Ambient</span>
                     </div>
                   </div>
 
-                  {/* Multi-Pollutant Deposition Array */}
-                  <div>
-                    <h4 className="text-[10px] uppercase tracking-wider font-semibold text-white/40 mb-2 flex items-center gap-1.5">
-                      <Activity className="w-3 h-3 text-rose-400" />
-                      Ambient Pollutant Concentrations & Canopy Deposition
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                      {/* PM2.5 */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-rose-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">PM2.5</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-rose-400 font-mono">{(weatherData?.pm25 ?? 42.0).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-emerald-400 block font-mono">{(metrics.pm25Intercepted * 1000).toFixed(1)} mg/h cap</span>
-                        </div>
-                      </div>
+                  {/* Wind Speed */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-teal-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Wind</span>
+                      <Wind className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.windSpeed} <span className="text-[10px] font-normal text-white/40">m/s</span></div>
+                      <span className="text-[9px] text-white/30">Velocity</span>
+                    </div>
+                  </div>
 
-                      {/* PM10 */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-amber-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">PM10</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-amber-300 font-mono">{(weatherData?.pm10 ?? 68.4).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-emerald-400 block font-mono">{(metrics.pm10Intercepted * 1000).toFixed(1)} mg/h cap</span>
-                        </div>
-                      </div>
+                  {/* Wind Direction */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-sky-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Heading</span>
+                      <Compass className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.windDir}° <span className="text-xs text-sky-400 font-semibold">{getCompassDirection(weatherData.windDir)}</span></div>
+                      <span className="text-[9px] text-white/30">Direction</span>
+                    </div>
+                  </div>
 
-                      {/* NO2 */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-purple-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">NO₂</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-purple-300 font-mono">{(weatherData?.no2 ?? 24.5).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-purple-400/80 block">Nitrogen Dioxide</span>
-                        </div>
+                  {/* PM2.5 */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-rose-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">PM2.5</span>
+                      <Activity className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className={`text-base font-bold font-mono ${
+                        weatherData.pm25 < 12 ? 'text-emerald-400' : weatherData.pm25 < 35 ? 'text-amber-400' : 'text-rose-400'
+                      }`}>
+                        {weatherData.pm25.toFixed(1)}
                       </div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
+                    </div>
+                  </div>
 
-                      {/* SO2 */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-yellow-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">SO₂</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-yellow-300 font-mono">{(weatherData?.so2 ?? 8.2).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-yellow-400/80 block">Sulfur Dioxide</span>
-                        </div>
-                      </div>
+                  {/* Carbon Monoxide */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-blue-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">CO</span>
+                      <Droplets className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.co.toFixed(0)}</div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
+                    </div>
+                  </div>
 
-                      {/* CO */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-blue-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">CO</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-blue-300 font-mono">{(weatherData?.co ?? 280).toFixed(0)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-blue-400/80 block">Carbon Monoxide</span>
-                        </div>
-                      </div>
-
-                      {/* Ozone */}
-                      <div className="bg-white/[0.02] rounded-xl p-2.5 border border-white/5 hover:bg-white/[0.04] transition-all">
-                        <div className="flex items-center justify-between text-indigo-400">
-                          <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Ozone O₃</span>
-                          <Activity className="w-3 h-3" />
-                        </div>
-                        <div className="mt-1">
-                          <div className="text-sm font-bold text-indigo-300 font-mono">{(weatherData?.ozone ?? 34.2).toFixed(1)} <span className="text-[9px] text-white/30 font-normal">µg/m³</span></div>
-                          <span className="text-[9px] text-indigo-400/80 block">Ground Ozone</span>
-                        </div>
-                      </div>
+                  {/* Ozone */}
+                  <div className="bg-white/[0.02] rounded-xl p-3 border border-white/5 flex flex-col justify-between hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center justify-between text-indigo-400">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold text-white/40">Ozone</span>
+                      <Leaf className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="mt-2">
+                      <div className="text-base font-bold text-white font-mono">{weatherData.ozone.toFixed(1)}</div>
+                      <span className="text-[9px] text-white/30">µg/m³</span>
                     </div>
                   </div>
 
@@ -1964,11 +1699,9 @@ export default function EcoArborApp() {
             </div>
 
             {weatherData && (
-              <p className="text-[10px] text-white/40 mt-3 leading-normal flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 text-teal-400 inline shrink-0 mt-0.5" />
-                <span>
-                  Aerodynamic flux calculation uses Ideal Gas Law dry air density (<strong className="text-white/80">{metrics.airDensity.toFixed(3)} kg/m³</strong> at {weatherData?.temp ?? 24.5}°C, {weatherData?.pressure ?? 938.5} hPa) and resistance equation $V_d = (R_a + R_b + R_c)^{-1}$ to continuously compute particulate deposition.
-                </span>
+              <p className="text-[10px] text-white/40 mt-4 leading-normal flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-white/40 inline" />
+                <span>The aerodynamic PM2.5 capture calculation of the simulated tree canopy actively updates based on the live wind speed of <strong className="text-white/80">{weatherData.windSpeed} m/s</strong> and localized concentration of <strong className="text-white/80">{weatherData.pm25} µg/m³</strong>.</span>
               </p>
             )}
           </div>
