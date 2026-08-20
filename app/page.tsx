@@ -317,8 +317,10 @@ export default function EcoArborApp() {
       if (reportParam) {
         const jsonStr = decodeURIComponent(atob(reportParam));
         const parsed = JSON.parse(jsonStr);
-        setSharedReportData(parsed);
-        setShowSharedBanner(true);
+        setTimeout(() => {
+          setSharedReportData(parsed);
+          setShowSharedBanner(true);
+        }, 0);
       }
     } catch (e) {
       console.error("Failed to parse share parameter from URL", e);
@@ -769,7 +771,7 @@ export default function EcoArborApp() {
   }, [logs]);
 
   // QR Code & Ecological Report Share URL Generator
-  const shareableUrl = useMemo(() => {
+  const shareableUrl = (() => {
     if (!mounted || typeof window === 'undefined') return '';
     
     // Construct lightweight payload containing stand totals & survey items
@@ -779,7 +781,6 @@ export default function EcoArborApp() {
 
     const payload = {
       v: 1,
-      t: Date.now(),
       loc: liveLocationName || 'Dehradun, India (FRI HQ)',
       lat: liveLocation ? Number(liveLocation.lat.toFixed(4)) : 30.3165,
       lon: liveLocation ? Number(liveLocation.lon.toFixed(4)) : 78.0322,
@@ -809,7 +810,7 @@ export default function EcoArborApp() {
     } catch {
       return typeof window !== 'undefined' ? window.location.href : '';
     }
-  }, [mounted, liveLocationName, liveLocation, logs, standTotals, metrics]);
+  })();
 
   // Selected totals for comparative chart (Arbor Stand Selected Synthesis)
   const selectedTotals = useMemo(() => {
@@ -3020,95 +3021,101 @@ export default function EcoArborApp() {
                 <div className="bg-white/[0.02] backdrop-blur-xl border border-white/10 hover:border-emerald-500/20 rounded-2xl p-4 sm:p-6 shadow-2xl transition-all duration-300 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
                   
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={growthTrajectoryData} margin={{ top: 15, right: 20, left: 0, bottom: 5 }}>
-                        <defs>
-                          <linearGradient id="carbonGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />
-                            <stop offset="60%" stopColor="#10b981" stopOpacity={0.08} />
-                            <stop offset="100%" stopColor="#059669" stopOpacity={0.00} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="4 4" stroke="rgba(255, 255, 255, 0.06)" vertical={false} />
-                        <XAxis 
-                          dataKey="yearLabel" 
-                          stroke="rgba(255, 255, 255, 0.3)" 
-                          fontSize={11} 
-                          fontFamily="monospace"
-                          tickLine={false} 
-                          axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }} 
-                          dy={6}
-                        />
-                        <YAxis 
-                          stroke="rgba(255, 255, 255, 0.3)" 
-                          fontSize={11} 
-                          fontFamily="monospace"
-                          tickLine={false} 
-                          axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }}
-                          tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k kg` : `${val} kg`}
-                          dx={-4}
-                        />
-                        <Tooltip 
-                          cursor={{ stroke: 'rgba(52, 211, 153, 0.3)', strokeWidth: 1.5, strokeDasharray: '4 4' }}
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const data = payload[0].payload;
-                              return (
-                                <div className="bg-slate-900/90 backdrop-blur-xl border border-emerald-500/30 p-4 rounded-xl shadow-2xl text-xs space-y-2.5 min-w-[220px]">
-                                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                                    <span className="font-mono font-bold text-emerald-400 text-xs flex items-center gap-1.5">
-                                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                                      {data.yearLabel}
-                                    </span>
-                                    <span className="text-[10px] text-white/50 font-mono bg-white/[0.06] px-2 py-0.5 rounded border border-white/10">
-                                      Year {new Date().getFullYear() + data.year}
-                                    </span>
+                  <div className="h-[300px] w-full min-w-0">
+                    {mounted ? (
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                        <AreaChart data={growthTrajectoryData} margin={{ top: 15, right: 20, left: 0, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id="carbonGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />
+                              <stop offset="60%" stopColor="#10b981" stopOpacity={0.08} />
+                              <stop offset="100%" stopColor="#059669" stopOpacity={0.00} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="4 4" stroke="rgba(255, 255, 255, 0.06)" vertical={false} />
+                          <XAxis 
+                            dataKey="yearLabel" 
+                            stroke="rgba(255, 255, 255, 0.3)" 
+                            fontSize={11} 
+                            fontFamily="monospace"
+                            tickLine={false} 
+                            axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }} 
+                            dy={6}
+                          />
+                          <YAxis 
+                            stroke="rgba(255, 255, 255, 0.3)" 
+                            fontSize={11} 
+                            fontFamily="monospace"
+                            tickLine={false} 
+                            axisLine={{ stroke: 'rgba(255, 255, 255, 0.1)' }}
+                            tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k kg` : `${val} kg`}
+                            dx={-4}
+                          />
+                          <Tooltip 
+                            cursor={{ stroke: 'rgba(52, 211, 153, 0.3)', strokeWidth: 1.5, strokeDasharray: '4 4' }}
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900/90 backdrop-blur-xl border border-emerald-500/30 p-4 rounded-xl shadow-2xl text-xs space-y-2.5 min-w-[220px]">
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                      <span className="font-mono font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                                        {data.yearLabel}
+                                      </span>
+                                      <span className="text-[10px] text-white/50 font-mono bg-white/[0.06] px-2 py-0.5 rounded border border-white/10">
+                                        Year {new Date().getFullYear() + data.year}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1.5 font-mono text-[11px]">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-white/60">Total CO₂e Stored:</span>
+                                        <span className="font-bold text-white font-mono">{data.co2e.toLocaleString()} kg</span>
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-white/60">Net Sequestration:</span>
+                                        <span className="font-bold text-emerald-400 font-mono">+{data.netGain.toLocaleString()} kg</span>
+                                      </div>
+                                      <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[10px]">
+                                        <span className="text-white/40">Tree Dimensions:</span>
+                                        <span className="text-sky-300 font-semibold">{data.dbh} cm DBH &middot; {data.canopy} m Canopy</span>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="space-y-1.5 font-mono text-[11px]">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-white/60">Total CO₂e Stored:</span>
-                                      <span className="font-bold text-white font-mono">{data.co2e.toLocaleString()} kg</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-white/60">Net Sequestration:</span>
-                                      <span className="font-bold text-emerald-400 font-mono">+{data.netGain.toLocaleString()} kg</span>
-                                    </div>
-                                    <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[10px]">
-                                      <span className="text-white/40">Tree Dimensions:</span>
-                                      <span className="text-sky-300 font-semibold">{data.dbh} cm DBH &middot; {data.canopy} m Canopy</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey={trajectoryChartMetric} 
-                          stroke="#34d399" 
-                          strokeWidth={2.5} 
-                          fillOpacity={1} 
-                          fill="url(#carbonGradient)" 
-                          dot={(props: { cx?: number; cy?: number; index?: number; payload?: { isMilestone?: boolean } }) => {
-                            const { cx, cy, index, payload } = props;
-                            if (!cx || !cy) return null;
-                            if (payload?.isMilestone) {
-                              return (
-                                <g key={`dot-${index ?? 0}-${cx}-${cy}`}>
-                                  <circle cx={cx} cy={cy} r={6} fill="#022c22" stroke="#34d399" strokeWidth={2} />
-                                  <circle cx={cx} cy={cy} r={2.5} fill="#34d399" />
-                                </g>
-                              );
-                            }
-                            return <circle key={`dot-small-${index ?? 0}-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill="#10b981" opacity={0.6} />;
-                          }}
-                          activeDot={{ r: 7, stroke: '#34d399', strokeWidth: 2.5, fill: '#022c22' }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey={trajectoryChartMetric} 
+                            stroke="#34d399" 
+                            strokeWidth={2.5} 
+                            fillOpacity={1} 
+                            fill="url(#carbonGradient)" 
+                            dot={(props: { cx?: number; cy?: number; index?: number; payload?: { isMilestone?: boolean } }) => {
+                              const { cx, cy, index, payload } = props;
+                              if (!cx || !cy) return null;
+                              if (payload?.isMilestone) {
+                                return (
+                                  <g key={`dot-${index ?? 0}-${cx}-${cy}`}>
+                                    <circle cx={cx} cy={cy} r={6} fill="#022c22" stroke="#34d399" strokeWidth={2} />
+                                    <circle cx={cx} cy={cy} r={2.5} fill="#34d399" />
+                                  </g>
+                                );
+                              }
+                              return <circle key={`dot-small-${index ?? 0}-${cx}-${cy}`} cx={cx} cy={cy} r={3} fill="#10b981" opacity={0.6} />;
+                            }}
+                            activeDot={{ r: 7, stroke: '#34d399', strokeWidth: 2.5, fill: '#022c22' }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-white/40 font-mono text-xs">
+                        Initializing Growth Model...
+                      </div>
+                    )}
                   </div>
 
                   {/* Milestone Horizon Cards Grid */}
@@ -3550,8 +3557,8 @@ export default function EcoArborApp() {
               </div>
 
               {/* Recharts chart render */}
-              <div className="lg:col-span-8 bg-white/[0.02] rounded-xl p-4 border border-white/10 h-[280px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="lg:col-span-8 bg-white/[0.02] rounded-xl p-4 border border-white/10 h-[280px] min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart
                     data={[
                       {
