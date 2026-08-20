@@ -5,6 +5,7 @@ import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { 
   Download, 
   Plus, 
@@ -35,7 +36,15 @@ import {
   Clock,
   TrendingUp,
   X,
-  RotateCcw
+  RotateCcw,
+  QrCode,
+  Share2,
+  Copy,
+  Check,
+  ExternalLink,
+  Smartphone,
+  Link,
+  Printer
 } from 'lucide-react';
 
 type Species = {
@@ -221,6 +230,14 @@ export default function EcoArborApp() {
   const [isSynced, setIsSynced] = useState<boolean>(false);
   const [locationSearchQuery, setLocationSearchQuery] = useState<string>('');
 
+  // QR Code & Ecological Report Share State Variables
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
+  const [qrTheme, setQrTheme] = useState<'emerald' | 'monochrome' | 'cyber'>('emerald');
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [sharedReportData, setSharedReportData] = useState<any>(null);
+  const [showSharedBanner, setShowSharedBanner] = useState<boolean>(false);
+  const [importSuccessToast, setImportSuccessToast] = useState<boolean>(false);
+
   // Hydrate states from localStorage safely on client mount to prevent hydration mismatch
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -290,6 +307,94 @@ export default function EcoArborApp() {
       if (weatherData) localStorage.setItem('ecoarbor_weatherData', JSON.stringify(weatherData));
     } catch {}
   }, [selectedSpeciesId, dbh, canopyDiameter, pm25, windSpeed, seasonalMode, liveLocation, liveLocationName, weatherData, mounted]);
+
+  // Check URL query parameters for shared report payload on page load
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const reportParam = params.get('report');
+      if (reportParam) {
+        const jsonStr = decodeURIComponent(atob(reportParam));
+        const parsed = JSON.parse(jsonStr);
+        setSharedReportData(parsed);
+        setShowSharedBanner(true);
+      }
+    } catch (e) {
+      console.error("Failed to parse share parameter from URL", e);
+    }
+  }, [mounted]);
+
+  const handleCopyShareLink = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareableUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = shareableUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch (err) {
+      console.error("Failed to copy link", err);
+    }
+  };
+
+  const handleDownloadQrPng = () => {
+    const canvas = document.getElementById('ecoarbor-interactive-qr-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      const image = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = image;
+      a.download = `ecoarbor_report_qr_${Date.now()}.png`;
+      a.click();
+    }
+  };
+
+  const handleDownloadQrSvg = () => {
+    const svgEl = document.getElementById('ecoarbor-interactive-qr-svg');
+    if (svgEl) {
+      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = svgUrl;
+      downloadLink.download = `ecoarbor_report_qr_${Date.now()}.svg`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+  };
+
+  const handleImportSharedReport = () => {
+    if (!sharedReportData || !sharedReportData.l) return;
+    const importedLogs: LoggedTree[] = sharedReportData.l.map((item: any, idx: number) => ({
+      id: item.id || `SHARED-${Date.now()}-${idx}`,
+      speciesId: item.spId || speciesData[0].id,
+      speciesName: item.sn || 'Imported Specimen',
+      scientificName: item.sc || 'Botanical specimen',
+      dbh: item.d || 40,
+      canopyDiameter: item.c || 8,
+      canopyArea: Math.PI * Math.pow((item.c || 8) / 2, 2),
+      co2e: item.co || 100,
+      pm25: item.pm || 50,
+      stormwater: item.sw || 300,
+      timestamp: new Date().toLocaleTimeString(),
+      lat: sharedReportData.lat,
+      lon: sharedReportData.lon,
+      locationName: sharedReportData.loc
+    }));
+
+    setLogs(prev => [...importedLogs, ...prev]);
+    setSelectedLogIds(prev => [...importedLogs.map(l => l.id), ...prev]);
+    setShowSharedBanner(false);
+    setImportSuccessToast(true);
+    setTimeout(() => setImportSuccessToast(false), 4000);
+  };
 
   const getCompassDirection = (deg: number) => {
     const index = Math.round(((deg % 360) / 45)) % 8;
@@ -663,6 +768,49 @@ export default function EcoArborApp() {
     }, { co2e: 0, pm25: 0, stormwater: 0, count: 0 });
   }, [logs]);
 
+  // QR Code & Ecological Report Share URL Generator
+  const shareableUrl = useMemo(() => {
+    if (!mounted || typeof window === 'undefined') return '';
+    
+    // Construct lightweight payload containing stand totals & survey items
+    const currentCo2 = standTotals.count > 0 ? standTotals.co2e : metrics.co2e;
+    const currentPm = standTotals.count > 0 ? standTotals.pm25 : metrics.pm25Intercepted;
+    const currentStorm = standTotals.count > 0 ? standTotals.stormwater : metrics.stormwater;
+
+    const payload = {
+      v: 1,
+      t: Date.now(),
+      loc: liveLocationName || 'Dehradun, India (FRI HQ)',
+      lat: liveLocation ? Number(liveLocation.lat.toFixed(4)) : 30.3165,
+      lon: liveLocation ? Number(liveLocation.lon.toFixed(4)) : 78.0322,
+      tc: logs.length > 0 ? logs.length : 1,
+      co2: Number(currentCo2.toFixed(1)),
+      pm: Number(currentPm.toFixed(1)),
+      sw: Number(currentStorm.toFixed(1)),
+      l: logs.slice(0, 25).map(l => ({
+        id: l.id,
+        sn: l.speciesName,
+        sc: l.scientificName,
+        d: l.dbh,
+        c: l.canopyDiameter,
+        co: Number(l.co2e.toFixed(1)),
+        pm: Number(l.pm25.toFixed(1)),
+        sw: Number(l.stormwater.toFixed(1)),
+        spId: l.speciesId
+      }))
+    };
+
+    try {
+      const jsonStr = JSON.stringify(payload);
+      const base64 = btoa(encodeURIComponent(jsonStr));
+      const origin = window.location.origin;
+      const pathname = window.location.pathname;
+      return `${origin}${pathname}?report=${base64}`;
+    } catch {
+      return typeof window !== 'undefined' ? window.location.href : '';
+    }
+  }, [mounted, liveLocationName, liveLocation, logs, standTotals, metrics]);
+
   // Selected totals for comparative chart (Arbor Stand Selected Synthesis)
   const selectedTotals = useMemo(() => {
     return logs.filter(log => selectedLogIds.includes(log.id)).reduce((acc, log) => {
@@ -827,6 +975,22 @@ export default function EcoArborApp() {
     doc.setFontSize(9);
     doc.text('PRECISION ECOLOGICAL MODELING & IMPACT ASSESSMENT REPORT', 15, 23);
     doc.text(`Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, 15, 29);
+
+    // Embed QR Code in Header for verified digital stand access
+    try {
+      const qrCanvas = document.getElementById('ecoarbor-pdf-qr-canvas') as HTMLCanvasElement;
+      if (qrCanvas) {
+        const qrDataUrl = qrCanvas.toDataURL('image/png');
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(172, 3, 30, 30, 1.5, 1.5, 'F');
+        doc.addImage(qrDataUrl, 'PNG', 173, 4, 28, 28);
+        doc.setFontSize(5);
+        doc.setTextColor(200, 230, 210);
+        doc.text('SCAN FOR DIGITAL REPORT', 171, 35);
+      }
+    } catch (err) {
+      console.error("QR Code PDF embedding failed:", err);
+    }
     
     // Field Assessment Metadata
     doc.setTextColor(50, 50, 50);
@@ -1473,14 +1637,24 @@ export default function EcoArborApp() {
               <p className="text-xs text-slate-400 font-medium">Precision Ecological Modeling & Canopy Benefit Quantifier</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="text-emerald-300 font-mono font-medium tracking-wide">
-              Methods: USDA, i-Tree, & FRI Compliant
-            </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="flex items-center gap-2 bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Generate QR Code & Share Ecological Report"
+            >
+              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Share & QR Code</span>
+            </button>
+            <div className="hidden sm:flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-emerald-300 font-mono font-medium tracking-wide">
+                Methods: USDA, i-Tree, & FRI Compliant
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -3044,7 +3218,14 @@ export default function EcoArborApp() {
               <p className="text-xs text-white/60 mt-1">Real-time database of surveyed tree inventory assets</p>
             </div>
             {logs.length > 0 && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button 
+                  onClick={() => setShowQrModal(true)}
+                  className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                  Share & QR Code
+                </button>
                 <button 
                   onClick={handleDownloadPDF}
                   className="flex items-center gap-2 text-xs font-semibold text-sky-300 bg-sky-950/80 hover:bg-sky-900/80 px-4 py-2.5 rounded-lg transition-colors border border-sky-500/30 active:scale-95 cursor-pointer shadow-md"
@@ -3533,6 +3714,295 @@ export default function EcoArborApp() {
               />
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hidden Offscreen Canvas for PDF QR Code Embedding */}
+      <div className="fixed -left-[9999px] -top-[9999px] pointer-events-none opacity-0">
+        <QRCodeCanvas 
+          id="ecoarbor-pdf-qr-canvas" 
+          value={shareableUrl || 'https://ecoarbor.studio'} 
+          size={300} 
+          fgColor="#023020" 
+          bgColor="#ffffff" 
+          includeMargin={true} 
+        />
+      </div>
+
+      {/* Shared Report URL Banner Notification */}
+      <AnimatePresence>
+        {showSharedBanner && sharedReportData && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4"
+          >
+            <div className="glass-panel border border-emerald-500/40 rounded-2xl p-4 shadow-2xl bg-slate-950/90 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-4 specular-line">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/30">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    Shared Ecological Survey Report
+                    <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      {sharedReportData.tc || 1} {sharedReportData.tc === 1 ? 'Tree' : 'Trees'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-white/60 mt-0.5">
+                    Location: <span className="text-white font-medium">{sharedReportData.loc || 'Survey Site'}</span>
+                    {' '}| CO2e: <span className="text-emerald-300 font-mono font-bold">{sharedReportData.co2?.toLocaleString()} kg</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleImportSharedReport}
+                  className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Import to Survey
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSharedBanner(false)}
+                  className="p-2 text-white/40 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Import Success Toast */}
+      <AnimatePresence>
+        {importSuccessToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 left-6 z-50 bg-slate-950/95 backdrop-blur-md border border-emerald-500/40 text-emerald-300 rounded-xl p-4 shadow-2xl flex items-center gap-3 text-xs font-semibold"
+          >
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+            <span>Successfully imported shared ecological stand inventory into active survey!</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QR Code Center & Share Modal */}
+      <AnimatePresence>
+        {showQrModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/15 overflow-hidden specular-line my-8"
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="absolute top-5 right-5 p-2 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all cursor-pointer z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Modal Header */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-emerald-950/80 text-emerald-400 rounded-2xl border border-emerald-500/30 shadow-inner">
+                  <QrCode className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    Ecological Report QR & Share Center
+                  </h2>
+                  <p className="text-xs text-white/60 mt-0.5">
+                    Generate digital verification QR codes and shareable links for field arborists and stakeholders
+                  </p>
+                </div>
+              </div>
+
+              {/* Dual Column Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                
+                {/* QR Code Display Column */}
+                <div className="md:col-span-5 flex flex-col items-center justify-center bg-slate-950/80 border border-white/10 rounded-2xl p-5 shadow-inner relative overflow-hidden">
+                  <div className="p-3 bg-white rounded-2xl shadow-2xl border border-white/20 flex items-center justify-center relative">
+                    <QRCodeCanvas 
+                      id="ecoarbor-interactive-qr-canvas"
+                      value={shareableUrl}
+                      size={180}
+                      fgColor={qrTheme === 'emerald' ? '#022c22' : qrTheme === 'cyber' ? '#0f172a' : '#000000'}
+                      bgColor="#ffffff"
+                      includeMargin={true}
+                    />
+                    <div className="hidden">
+                      <QRCodeSVG 
+                        id="ecoarbor-interactive-qr-svg"
+                        value={shareableUrl}
+                        size={180}
+                        fgColor={qrTheme === 'emerald' ? '#022c22' : qrTheme === 'cyber' ? '#0f172a' : '#000000'}
+                        bgColor="#ffffff"
+                        includeMargin={true}
+                      />
+                    </div>
+                  </div>
+
+                  {/* QR Theme Preset Options */}
+                  <div className="mt-4 w-full space-y-1.5">
+                    <span className="text-[10px] text-white/40 uppercase font-mono font-bold block text-center">
+                      QR Palette Theme
+                    </span>
+                    <div className="grid grid-cols-3 gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => setQrTheme('emerald')}
+                        className={`py-1 px-2 rounded-lg text-[10px] font-bold transition-all ${
+                          qrTheme === 'emerald' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-white/60 hover:text-white'
+                        }`}
+                      >
+                        Emerald
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQrTheme('cyber')}
+                        className={`py-1 px-2 rounded-lg text-[10px] font-bold transition-all ${
+                          qrTheme === 'cyber' ? 'bg-teal-500 text-slate-950 shadow' : 'text-white/60 hover:text-white'
+                        }`}
+                      >
+                        Cyber
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQrTheme('monochrome')}
+                        className={`py-1 px-2 rounded-lg text-[10px] font-bold transition-all ${
+                          qrTheme === 'monochrome' ? 'bg-white text-slate-950 shadow' : 'text-white/60 hover:text-white'
+                        }`}
+                      >
+                        Classic
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Report Telemetry & Share Controls Column */}
+                <div className="md:col-span-7 space-y-4">
+                  
+                  {/* Stand Assessment Summary Badge */}
+                  <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-white/50 font-medium">Survey Location</span>
+                      <span className="font-bold text-white flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-emerald-400" />
+                        {liveLocationName || 'Dehradun, India'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5">
+                      <div className="bg-white/[0.02] p-2 rounded-xl text-center border border-white/5">
+                        <span className="text-[9px] text-white/40 block">INVENTORY</span>
+                        <span className="text-xs font-mono font-bold text-emerald-400">
+                          {standTotals.count > 0 ? standTotals.count : 1} Trees
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] p-2 rounded-xl text-center border border-white/5">
+                        <span className="text-[9px] text-white/40 block">CARBON</span>
+                        <span className="text-xs font-mono font-bold text-emerald-300">
+                          {(standTotals.count > 0 ? standTotals.co2e : metrics.co2e).toFixed(0)} kg
+                        </span>
+                      </div>
+                      <div className="bg-white/[0.02] p-2 rounded-xl text-center border border-white/5">
+                        <span className="text-[9px] text-white/40 block">AIR FILTRATION</span>
+                        <span className="text-xs font-mono font-bold text-teal-300">
+                          {(standTotals.count > 0 ? standTotals.pm25 : metrics.pm25Intercepted).toFixed(0)} mg/h
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Shareable Link Input with One-click Copy */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-white/80 flex items-center gap-1.5">
+                      <Link className="w-3.5 h-3.5 text-emerald-400" />
+                      Direct Shareable Report Link
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={shareableUrl}
+                        className="w-full bg-slate-950/80 border border-white/15 rounded-xl px-3 py-2 text-xs font-mono text-emerald-300 focus:outline-none truncate"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyShareLink}
+                        className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer flex items-center gap-1.5 shadow"
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy Link
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons for QR Image Downloads & PDF Export */}
+                  <div className="grid grid-cols-3 gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleDownloadQrPng}
+                      className="py-2.5 px-3 bg-white/5 hover:bg-white/10 border border-white/15 rounded-xl text-xs font-semibold text-white transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      PNG Image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadQrSvg}
+                      className="py-2.5 px-3 bg-white/5 hover:bg-white/10 border border-white/15 rounded-xl text-xs font-semibold text-white transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-teal-400" />
+                      SVG Format
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDownloadPDF();
+                        setShowQrModal(false);
+                      }}
+                      className="py-2.5 px-3 bg-sky-950/80 hover:bg-sky-900/80 border border-sky-500/30 rounded-xl text-xs font-semibold text-sky-300 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer shadow"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-sky-400" />
+                      PDF + QR
+                    </button>
+                  </div>
+
+                  {/* Field Arborist Usage Tip */}
+                  <div className="p-3 bg-emerald-950/40 border border-emerald-500/20 rounded-xl flex items-start gap-2.5 text-[11px] text-emerald-200/80 leading-relaxed">
+                    <Smartphone className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      Print QR codes on field inventory tags or park signage. Visitors and environmental auditors can scan the code with any smartphone camera to open this interactive report.
+                    </span>
+                  </div>
+
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
