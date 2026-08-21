@@ -1638,24 +1638,14 @@ export default function EcoArborApp() {
               <p className="text-xs text-slate-400 font-medium">Precision Ecological Modeling & Canopy Benefit Quantifier</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowQrModal(true)}
-              className="flex items-center gap-2 bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
-              title="Generate QR Code & Share Ecological Report"
-            >
-              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Share & QR Code</span>
-            </button>
-            <div className="hidden sm:flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-emerald-300 font-mono font-medium tracking-wide">
-                Methods: USDA, i-Tree, & FRI Compliant
-              </span>
-            </div>
+          <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-emerald-300 font-mono font-medium tracking-wide">
+              Methods: USDA, i-Tree, & FRI Compliant
+            </span>
           </div>
         </div>
       </header>
@@ -3224,38 +3214,40 @@ export default function EcoArborApp() {
               </h2>
               <p className="text-xs text-white/60 mt-1">Real-time database of surveyed tree inventory assets</p>
             </div>
-            {logs.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                <button 
-                  onClick={() => setShowQrModal(true)}
-                  className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
-                >
-                  <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                  Share & QR Code
-                </button>
-                <button 
-                  onClick={handleDownloadPDF}
-                  className="flex items-center gap-2 text-xs font-semibold text-sky-300 bg-sky-950/80 hover:bg-sky-900/80 px-4 py-2.5 rounded-lg transition-colors border border-sky-500/30 active:scale-95 cursor-pointer shadow-md"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download PDF Report
-                </button>
-                <button 
-                  onClick={handleDownloadCSV}
-                  className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download CSV
-                </button>
-                <button 
-                  onClick={handleClearLogs}
-                  className="flex items-center gap-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-950/60 px-4 py-2.5 rounded-lg transition-colors border border-red-500/20 active:scale-95 cursor-pointer shadow-md"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Clear Inventory
-                </button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              <button 
+                onClick={() => setShowQrModal(true)}
+                className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
+              >
+                <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                Share & QR Code
+              </button>
+              {logs.length > 0 && (
+                <>
+                  <button 
+                    onClick={handleDownloadPDF}
+                    className="flex items-center gap-2 text-xs font-semibold text-sky-300 bg-sky-950/80 hover:bg-sky-900/80 px-4 py-2.5 rounded-lg transition-colors border border-sky-500/30 active:scale-95 cursor-pointer shadow-md"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download PDF Report
+                  </button>
+                  <button 
+                    onClick={handleDownloadCSV}
+                    className="flex items-center gap-2 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900/80 px-4 py-2.5 rounded-lg transition-colors border border-emerald-500/30 active:scale-95 cursor-pointer shadow-md"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download CSV
+                  </button>
+                  <button 
+                    onClick={handleClearLogs}
+                    className="flex items-center gap-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-950/60 px-4 py-2.5 rounded-lg transition-colors border border-red-500/20 active:scale-95 cursor-pointer shadow-md"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear Inventory
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
