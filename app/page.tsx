@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { calculatePM25Deposition } from '@/lib/pm25';
 import { motion, AnimatePresence } from 'motion/react';
-import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, AreaChart, Area } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { 
@@ -369,6 +369,7 @@ export default function EcoArborApp() {
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(svgUrl);
     }
   };
 
@@ -848,7 +849,7 @@ export default function EcoArborApp() {
     const lon = baseLon + Math.cos(angle) * radius;
 
     const newLog: LoggedTree = {
-      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8).toUpperCase() : Math.random().toString(36).substring(2, 9).toUpperCase(),
       speciesId: activeSpecies.id,
       speciesName: activeSpecies.name,
       scientificName: activeSpecies.scientificName,
@@ -875,7 +876,7 @@ export default function EcoArborApp() {
 
   const handleAddTreeAtLocation = useCallback((lat: number, lon: number, locationName?: string) => {
     const newLog: LoggedTree = {
-      id: Math.random().toString(36).substring(2, 9).toUpperCase(),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8).toUpperCase() : Math.random().toString(36).substring(2, 9).toUpperCase(),
       speciesId: activeSpecies.id,
       speciesName: activeSpecies.name,
       scientificName: activeSpecies.scientificName,
@@ -957,6 +958,7 @@ export default function EcoArborApp() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleDownloadPDF = () => {

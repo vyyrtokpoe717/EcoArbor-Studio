@@ -22,7 +22,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'EcoArbor Studio - Precision Ecological Modeler',
-  description: 'A scientifically accurate arboricultural estimator utilizing peer-reviewed allometric and ecohydrological models.',
+  description: 'A scientific tool for calculating ecological benefits of tree species.',
+  openGraph: {
+    title: 'EcoArbor Studio',
+    description: 'A scientific tool for calculating ecological benefits of tree species.',
+  },
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
